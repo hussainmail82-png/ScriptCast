@@ -76,59 +76,137 @@ def parse_pdf(file_path):
             words = page.extract_words(extra_attrs=["fontname", "size"])
             if not words:
                 continue
+
+            # Extract page header (y < 50pt)
             header_words = [w for w in words if float(w["top"]) < 50]
             if header_words:
                 header_line = " ".join(w["text"] for w in sorted(header_words, key=lambda w: w["x0"]))
                 if len(header_line) >= 8 and all(header_line[i] == header_line[i+1] for i in range(0, min(8, len(header_line)-1), 2)):
                     header_line = header_line[::2]
                 page_headers[page_num] = header_line
+
+            # Group words into lines by y-coordinate
             content_words = [w for w in words if float(w["top"]) >= 50]
             lines_dict = {}
             for w in content_words:
                 y_key = round(float(w["top"]) / 3) * 3
                 lines_dict.setdefault(y_key, []).append(w)
-            page_lines = []
-            for y_key in sorted(lines_dict.keys()):
+
+            sorted_ykeys = sorted(lines_dict.keys())
+
+            # Estimate normal line spacing from most common gap
+            gaps = [sorted_ykeys[i+1] - sorted_ykeys[i] for i in range(len(sorted_ykeys)-1)]
+            if gaps:
+                # Normal line height = most frequent gap (rounded to nearest 2)
+                from collections import Counter
+                gap_counts = Counter(round(g/2)*2 for g in gaps if 8 < g < 30)
+                normal_lh = gap_counts.most_common(1)[0][0] if gap_counts else 14
+            else:
+                normal_lh = 14
+
+            # Group lines into paragraphs: new paragraph when gap > 1.4x normal line height
+            paragraphs = []  # list of (page_num, [line_text, ...], x0_of_first_line)
+            current_para = []
+            current_x0 = None
+            para_break_threshold = normal_lh * 1.4
+
+            for idx, y_key in enumerate(sorted_ykeys):
                 line_words = sorted(lines_dict[y_key], key=lambda w: w["x0"])
                 text = normalise(" ".join(w["text"] for w in line_words))
-                page_lines.append((page_num, text))
-            elements.extend(parse_lines(page_lines))
+                x0 = float(line_words[0]["x0"]) if line_words else 0
+
+                if idx > 0:
+                    gap = y_key - sorted_ykeys[idx-1]
+                    if gap > para_break_threshold:
+                        # Save current paragraph
+                        if current_para:
+                            paragraphs.append((page_num, current_para, current_x0))
+                        current_para = []
+                        current_x0 = None
+
+                if not current_para:
+                    current_x0 = x0
+                current_para.append(text)
+
+            if current_para:
+                paragraphs.append((page_num, current_para, current_x0))
+
+            # Convert paragraphs to elements
+            elements.extend(parse_paragraphs(paragraphs, page_num))
+
     return merge_elements(elements), page_headers
 
-def parse_lines(page_lines):
+def parse_paragraphs(paragraphs, page_num):
+    """Classify whole paragraphs rather than individual lines.
+    Each paragraph is a list of lines that belong together visually.
+    The first line of the paragraph determines its type.
+    """
     elements = []
     state = "action"
     pending_char = None
-    i = 0
-    while i < len(page_lines):
-        page_num, line = page_lines[i]
-        stripped = line.strip()
-        if not stripped or is_skip_line(stripped):
-            i += 1
+
+    for para_page, lines, x0 in paragraphs:
+        if not lines:
             continue
-        if SCENE_HEADING.match(stripped) or SCENE_HEADING_NUMBERED.match(stripped):
-            elements.append({"type": "scene_heading", "text": stripped.upper(), "display_text": stripped.upper(), "page": page_num})
-            state = "action"; pending_char = None; i += 1; continue
-        if TRANSITION_PAT.match(stripped):
-            elements.append({"type": "transition", "text": stripped, "display_text": stripped, "page": page_num})
-            state = "action"; pending_char = None; i += 1; continue
-        has_lower = any(c.islower() for c in stripped)
-        if CHARACTER_CUE.match(stripped) and not has_lower and not NON_CHARACTER_PAT.match(stripped):
-            next_content = next((page_lines[j][1].strip() for j in range(i+1, min(i+4, len(page_lines))) if page_lines[j][1].strip()), "")
-            if next_content and not SCENE_HEADING.match(next_content) and not TRANSITION_PAT.match(next_content):
-                char_name = strip_extension(stripped)
-                if char_name:
-                    pending_char = char_name; state = "dialogue"
-                    elements.append({"type": "character", "text": char_name, "display_text": stripped, "character": char_name, "page": page_num})
-                    i += 1; continue
-        if state == "dialogue" and PARENTHETICAL_PAT.match(stripped):
-            elements.append({"type": "parenthetical", "text": stripped, "display_text": stripped, "character": pending_char, "page": page_num})
-            i += 1; continue
+
+        # Join all lines of the paragraph for classification
+        first_line = lines[0].strip()
+        full_text = " ".join(l.strip() for l in lines if l.strip())
+        display_text = "\n".join(l.strip() for l in lines if l.strip())
+
+        if not first_line or is_skip_line(first_line):
+            continue
+
+        # Scene heading
+        if SCENE_HEADING.match(first_line) or SCENE_HEADING_NUMBERED.match(first_line):
+            elements.append({"type": "scene_heading", "text": full_text.upper(),
+                             "display_text": full_text.upper(), "page": para_page})
+            state = "action"; pending_char = None
+            continue
+
+        # Transition
+        if TRANSITION_PAT.match(first_line):
+            elements.append({"type": "transition", "text": full_text,
+                             "display_text": display_text, "page": para_page})
+            state = "action"; pending_char = None
+            continue
+
+        # Single-line ALL-CAPS = potential character cue
+        has_lower = any(c.islower() for c in first_line)
+        is_single_line = len([l for l in lines if l.strip()]) == 1
+        if (is_single_line and CHARACTER_CUE.match(first_line) and
+                not has_lower and not NON_CHARACTER_PAT.match(first_line)):
+            char_name = strip_extension(first_line)
+            if char_name:
+                pending_char = char_name; state = "dialogue"
+                elements.append({"type": "character", "text": char_name,
+                                 "display_text": first_line, "character": char_name, "page": para_page})
+                continue
+
+        # Parenthetical (single line wrapped in parens)
+        if state == "dialogue" and is_single_line and PARENTHETICAL_PAT.match(first_line):
+            elements.append({"type": "parenthetical", "text": full_text,
+                             "display_text": display_text, "character": pending_char, "page": para_page})
+            continue
+
+        # Dialogue — if we are in dialogue state, indented text belongs to current character
+        # Dialogue paragraphs are typically indented (x0 > 200pt roughly)
         if state == "dialogue" and pending_char:
-            elements.append({"type": "dialogue", "text": stripped, "display_text": stripped, "character": pending_char, "page": page_num})
-            i += 1; continue
-        elements.append({"type": "action", "text": stripped, "display_text": stripped, "page": page_num})
-        state = "action"; pending_char = None; i += 1
+            # Check indentation: dialogue is typically x0 > 150pt (indented from left margin)
+            if x0 > 100:
+                elements.append({"type": "dialogue", "text": full_text,
+                                 "display_text": display_text, "character": pending_char, "page": para_page})
+                continue
+            else:
+                # Action line interrupting dialogue (stage direction between speeches)
+                # Reset to action state after this
+                state = "action"; pending_char = None
+
+        # Action (default)
+        elements.append({"type": "action", "text": full_text,
+                         "display_text": display_text, "page": para_page})
+        state = "action"; pending_char = None
+
     return elements
 
 def parse_fdx(file_path):
