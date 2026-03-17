@@ -281,6 +281,7 @@
     background: var(--page-bg);
     width: 793px;
     min-height: 1057px;
+    /* left=72px (=54pt outer margin), right=72px, top/bottom=72px */
     padding: 72px 72px 72px 72px;
     box-sizing: border-box;
     font-family: var(--font-script);
@@ -288,6 +289,7 @@
     line-height: 1.5;
     color: var(--page-text);
     position: relative;
+    /* Content area = 793 - 144 = 649px wide */
   }
 
   /* Screenplay elements — pixel-perfect from PDF x0 measurements */
@@ -302,23 +304,41 @@
   .el:hover { background: rgba(232,184,75,.12); }
   .el.playing { background: rgba(232,184,75,.25); }
 
-  /* Scene heading: full width, bold, extra space above */
+  /* SCENE HEADING
+     Left number at x=0 (content left edge, in the margin)
+     Heading text indented 72px (= 54pt margin width)
+     Right number at x=626px, right-aligned
+  */
   .el-scene_heading {
     font-weight: bold;
     margin: 1.4em 0 0;
     display: block;
     line-height: 1.5;
+    position: relative;
+    padding-left: 72px;  /* indent text to match body */
+  }
+  .scene-num-left {
+    position: absolute;
+    left: 0;
+  }
+  .scene-num-right {
+    position: absolute;
+    left: 626px;
+  }
+  .scene-heading-text {
+    display: inline;
   }
 
-  /* Action: full width, paragraph gap above */
+  /* ACTION: indented 72px to match body text x0=108pt */
   .el-action {
     margin: 0;
     margin-top: 1em;
+    padding-left: 72px;
     display: block;
     line-height: 1.5;
   }
 
-  /* Character cue: x0=252pt from page left = 336px - 72px padding = 264px from content left */
+  /* CHARACTER CUE: 264px from content left */
   .el-character {
     margin-left: 264px;
     text-transform: uppercase;
@@ -328,23 +348,20 @@
     line-height: 1.5;
   }
 
-  /* Dialogue: x0=180pt from page left = 240px - 72px padding = 168px from content left
-     Right: page right 487pt = 649px - 72px padding = 577px, so right margin = 649-577 = 72px... 
-     Actually right edge of dialogue ~= 487pt = 649px, content area = 793-144 = 649px wide
-     So dialogue right margin = 793 - 649 - 72 = 72px */
+  /* DIALOGUE: 168px left, right edge at ~487pt = right margin ~72px */
   .el-dialogue {
     margin-left: 168px;
-    margin-right: 96px;
+    margin-right: 72px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
     line-height: 1.5;
   }
 
-  /* Parenthetical: slightly more indented than dialogue */
+  /* PARENTHETICAL: between dialogue and character indent */
   .el-parenthetical {
     margin-left: 210px;
-    margin-right: 140px;
+    margin-right: 130px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
@@ -354,6 +371,7 @@
 
   .el-transition {
     text-align: right;
+    padding-right: 0;
     margin: 1em 0;
     display: block;
     line-height: 1.5;
@@ -824,9 +842,18 @@ function buildScriptDisplay() {
     div.dataset.idx = i;
     // Render each element type correctly
     if (el.type === 'scene_heading') {
-      // Scene headings: number on left, number on right (e.g. "1 EXT. BOAT. DAY. 1")
-      // The text already contains this from the PDF — just display it
-      div.textContent = el.text || '';
+      // Parse "1 EXT. BOAT. DAY. 1" into: left-num, heading text, right-num
+      const raw = el.text || '';
+      const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
+      if (m) {
+        div.innerHTML =
+          `<span class="scene-num-left">${m[1]}</span>` +
+          `<span class="scene-heading-text">${m[2]}</span>` +
+          `<span class="scene-num-right">${m[3]}</span>`;
+      } else {
+        // No numbers (e.g. un-numbered scenes)
+        div.innerHTML = `<span class="scene-heading-text">${raw}</span>`;
+      }
     } else if (el.type === 'action') {
       div.textContent = el.text || '';
     } else if (el.type === 'dialogue') {
