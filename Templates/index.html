@@ -226,11 +226,11 @@
 
   /* Screenplay page */
   .page-container {
-    background: #2a2a2a;
+    background: #1a1a1a;
     border: 1px solid var(--border);
     border-radius: 12px;
     overflow: auto;
-    padding: 24px;
+    padding: 16px;
   }
 
   .page-toolbar {
@@ -254,33 +254,29 @@
     width: 180px;
   }
 
-  /* A4 page: 210mm wide. At 96dpi: 794px wide.
-     Screenplay margins (A4 standard):
-       top/bottom: 25mm (~94px)
-       left: 38mm (~144px) — wider for binding
-       right: 25mm (~94px)
-     Printable width: 210 - 38 - 25 = 147mm (~556px)
-  */
+  /* A4 page — responsive, fits the container */
   .page-wrapper {
     background: var(--page-bg);
-    width: 794px;
-    min-height: 1123px; /* A4 height at 96dpi */
+    width: 100%;
+    max-width: 794px;
+    min-height: 1123px;
     margin: 0 auto;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.15);
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+    box-sizing: border-box;
   }
 
   #script-display {
     background: var(--page-bg);
-    width: 794px;
+    width: 100%;
     min-height: 1123px;
-    padding: 94px 94px 94px 144px;
+    /* A4 margins: top/bottom 25mm, left 38mm (binding), right 25mm */
+    padding: 72px 72px 72px 108px;
     box-sizing: border-box;
     font-family: var(--font-script);
-    font-size: 12pt;
-    line-height: 1.0;
+    font-size: 12px;
+    line-height: 1.5;
     color: var(--page-text);
     position: relative;
-    margin: 0 auto;
   }
 
   /* Screenplay element styles — Final Draft A4 standard
@@ -308,7 +304,7 @@
     display: block;
   }
   .el-character {
-    margin-left: 206px;
+    margin-left: 35%;
     text-transform: uppercase;
     font-weight: normal;
     margin-top: 1em;
@@ -316,27 +312,27 @@
     display: block;
   }
   .el-dialogue {
-    margin-left: 89px;
-    margin-right: 100px;
+    margin-left: 16%;
+    margin-right: 16%;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
-    white-space: pre-wrap;
+    line-height: 1.5;
   }
   .el-parenthetical {
-    margin-left: 150px;
-    margin-right: 150px;
+    margin-left: 26%;
+    margin-right: 26%;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
-    white-space: pre-wrap;
+    line-height: 1.5;
+    font-style: italic;
   }
   .el-action {
     margin: 0;
     margin-top: 1em;
     margin-bottom: 0;
     display: block;
-    white-space: pre-wrap;
     line-height: 1.5;
   }
   .el-transition {
@@ -809,9 +805,13 @@ function buildScriptDisplay() {
     const div = document.createElement("div");
     div.className = `el el-${el.type}`;
     div.dataset.idx = i;
-    // Use textContent for all types — white-space:pre-wrap handles newlines natively
-    // For character cues show the display_text (preserves CONT'D etc.)
-    div.textContent = el.display_text || el.text || '';
+    // Action/dialogue: use text (full joined paragraph) so it reflows naturally
+    // Character: use display_text to preserve (CONT'D) etc.
+    if (el.type === 'action' || el.type === 'dialogue') {
+      div.textContent = el.text || '';
+    } else {
+      div.textContent = el.display_text || el.text || '';
+    }
     div.onclick = () => jumpToIndex(i);
     display.appendChild(div);
   });
