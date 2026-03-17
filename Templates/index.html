@@ -230,7 +230,10 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     overflow: auto;
-    padding: 16px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
   }
 
   .page-toolbar {
@@ -254,23 +257,31 @@
     width: 180px;
   }
 
-  /* A4 page — responsive, fits the container */
+  /* A4 page — exact PDF measurements (595pt wide, 842pt tall)
+     Scale: 1pt = 1.333px at 96dpi
+     Measured from PDF:
+       Page left edge: 0
+       Scene/action text x0: 108pt = 144px
+       Dialogue x0: 180pt = 240px  
+       Character cue x0: 252pt = 336px
+       Right text edge: ~487pt, so right margin = 144px
+       Page padding (outer): 72px = 54pt (outer margin)
+  */
   .page-wrapper {
     background: var(--page-bg);
-    width: 100%;
-    max-width: 794px;
-    min-height: 1123px;
+    width: 793px;
+    min-height: 1057px;
     margin: 0 auto;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+    box-shadow: 0 2px 20px rgba(0,0,0,0.25);
     box-sizing: border-box;
+    flex-shrink: 0;
   }
 
   #script-display {
     background: var(--page-bg);
-    width: 100%;
-    min-height: 1123px;
-    /* A4 margins: top/bottom 25mm, left 38mm (binding), right 25mm */
-    padding: 72px 72px 72px 108px;
+    width: 793px;
+    min-height: 1057px;
+    padding: 72px 72px 72px 72px;
     box-sizing: border-box;
     font-family: var(--font-script);
     font-size: 12px;
@@ -279,12 +290,7 @@
     position: relative;
   }
 
-  /* Screenplay element styles — Final Draft A4 standard
-     Printable width = 556px (147mm)
-     Character: indent ~206px from left margin (37% of 556)
-     Dialogue:  indent ~89px left, ~139px right of printable area
-     Parenthetical: indent ~150px left, ~184px right
-  */
+  /* Screenplay elements — pixel-perfect from PDF x0 measurements */
   .el {
     padding: 0;
     cursor: pointer;
@@ -296,50 +302,61 @@
   .el:hover { background: rgba(232,184,75,.12); }
   .el.playing { background: rgba(232,184,75,.25); }
 
+  /* Scene heading: full width, bold, extra space above */
   .el-scene_heading {
-    text-transform: uppercase;
     font-weight: bold;
-    margin: 1.2em 0 0.3em;
-    letter-spacing: .3px;
+    margin: 1.4em 0 0;
     display: block;
+    line-height: 1.5;
   }
+
+  /* Action: full width, paragraph gap above */
+  .el-action {
+    margin: 0;
+    margin-top: 1em;
+    display: block;
+    line-height: 1.5;
+  }
+
+  /* Character cue: x0=252pt from page left = 336px - 72px padding = 264px from content left */
   .el-character {
-    margin-left: 35%;
+    margin-left: 264px;
     text-transform: uppercase;
-    font-weight: normal;
-    margin-top: 0.8em;
+    margin-top: 1em;
     margin-bottom: 0;
     display: block;
+    line-height: 1.5;
   }
+
+  /* Dialogue: x0=180pt from page left = 240px - 72px padding = 168px from content left
+     Right: page right 487pt = 649px - 72px padding = 577px, so right margin = 649-577 = 72px... 
+     Actually right edge of dialogue ~= 487pt = 649px, content area = 793-144 = 649px wide
+     So dialogue right margin = 793 - 649 - 72 = 72px */
   .el-dialogue {
-    margin-left: 16%;
-    margin-right: 16%;
+    margin-left: 168px;
+    margin-right: 96px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
     line-height: 1.5;
   }
+
+  /* Parenthetical: slightly more indented than dialogue */
   .el-parenthetical {
-    margin-left: 26%;
-    margin-right: 26%;
+    margin-left: 210px;
+    margin-right: 140px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
     line-height: 1.5;
     font-style: italic;
   }
-  .el-action {
-    margin: 0;
-    margin-top: 0.8em;
-    margin-bottom: 0;
-    display: block;
-    line-height: 1.4;
-  }
+
   .el-transition {
     text-align: right;
     margin: 1em 0;
-    text-transform: uppercase;
     display: block;
+    line-height: 1.5;
   }
 
   .page-header-bar {
