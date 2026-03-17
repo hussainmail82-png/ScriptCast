@@ -226,14 +226,15 @@
 
   /* Screenplay page */
   .page-container {
-    background: #1a1a1a;
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    background: #3a3835;
+    border: 1px solid #222;
+    border-radius: 8px;
     overflow: auto;
-    padding: 20px;
+    padding: 32px 20px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    gap: 24px;
   }
 
   .page-toolbar {
@@ -275,13 +276,14 @@
   ─────────────────────────────────────────────────────────────────── */
 
   .page-wrapper {
-    background: var(--page-bg);
+    background: #fffef8;
     width: 793px;
     min-height: 1057px;
     margin: 0 auto;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.25);
+    box-shadow: 0 4px 32px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.2);
     box-sizing: border-box;
     flex-shrink: 0;
+    border: 1px solid #e0ddd4;
   }
 
   #script-display {
@@ -854,7 +856,7 @@ function buildScriptDisplay() {
         div.innerHTML =
           '<span style="position:absolute;left:-72px">' + m[1] + '</span>' +
           '<span>' + m[2] + '</span>' +
-          '<span style="position:absolute;left:554px">' + m[3] + '</span>';
+          '<span style="position:absolute;left:449px">' + m[3] + '</span>';
       } else {
         div.textContent = raw;
       }
