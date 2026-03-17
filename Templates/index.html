@@ -257,16 +257,23 @@
     width: 180px;
   }
 
-  /* A4 page — exact PDF measurements (595pt wide, 842pt tall)
-     Scale: 1pt = 1.333px at 96dpi
-     Measured from PDF:
-       Page left edge: 0
-       Scene/action text x0: 108pt = 144px
-       Dialogue x0: 180pt = 240px  
-       Character cue x0: 252pt = 336px
-       Right text edge: ~487pt, so right margin = 144px
-       Page padding (outer): 72px = 54pt (outer margin)
-  */
+  /* ── Screenplay page layout ──────────────────────────────────────────
+     PDF is 595pt × 842pt. At 96dpi (1pt = 1.333px): 793px × 1057px.
+
+     PDF measured positions (pt):
+       Outer left margin:  54pt  → 72px   (scene numbers live here)
+       Body text x0:      108pt  → 144px  (action, dialogue start here)
+       Dialogue x0:       180pt  → 240px
+       Character cue x0:  252pt  → 336px
+       Right scene num:   523pt  → 698px  (from page left)
+       Right body edge:   ~487pt → ~649px
+
+     We render this as:
+       .page-wrapper  = 793px wide white page
+       #script-display has NO left padding — we use margin-left on elements
+       Scene numbers use absolute position within .el-scene_heading
+  ─────────────────────────────────────────────────────────────────── */
+
   .page-wrapper {
     background: var(--page-bg);
     width: 793px;
@@ -281,18 +288,16 @@
     background: var(--page-bg);
     width: 793px;
     min-height: 1057px;
-    /* left=72px (=54pt outer margin), right=72px, top/bottom=72px */
-    padding: 72px 72px 72px 72px;
+    /* Top/bottom margins = 72px. Left/right = 0 — elements handle their own indentation */
+    padding: 72px 0;
     box-sizing: border-box;
     font-family: var(--font-script);
     font-size: 12px;
     line-height: 1.5;
     color: var(--page-text);
     position: relative;
-    /* Content area = 793 - 144 = 649px wide */
   }
 
-  /* Screenplay elements — pixel-perfect from PDF x0 measurements */
   .el {
     padding: 0;
     cursor: pointer;
@@ -305,9 +310,10 @@
   .el.playing { background: rgba(232,184,75,.25); }
 
   /* SCENE HEADING
-     Left number at x=0 (content left edge, in the margin)
-     Heading text indented 72px (= 54pt margin width)
-     Right number at x=626px, right-aligned
+     Number left:  54pt = 72px from page left (sits in margin)
+     Text:        108pt = 144px from page left
+     Number right: 523pt = 698px from page left (right-aligned at body right)
+     Element is position:relative so child spans can be absolute
   */
   .el-scene_heading {
     font-weight: bold;
@@ -315,32 +321,25 @@
     display: block;
     line-height: 1.5;
     position: relative;
-    padding-left: 72px;  /* indent text to match body */
+    /* Text starts at 144px, right edge at ~650px */
+    margin-left: 144px;
+    margin-right: 72px;
   }
-  .scene-num-left {
-    position: absolute;
-    left: 0;
-  }
-  .scene-num-right {
-    position: absolute;
-    left: 626px;
-  }
-  .scene-heading-text {
-    display: inline;
-  }
+  /* scene numbers use inline style — see JS render */
 
-  /* ACTION: indented 72px to match body text x0=108pt */
+  /* ACTION: starts at 108pt = 144px from page left */
   .el-action {
-    margin: 0;
+    margin-left: 144px;
+    margin-right: 72px;
     margin-top: 1em;
-    padding-left: 72px;
+    margin-bottom: 0;
     display: block;
     line-height: 1.5;
   }
 
-  /* CHARACTER CUE: 264px from content left */
+  /* CHARACTER CUE: 252pt = 336px from page left */
   .el-character {
-    margin-left: 264px;
+    margin-left: 336px;
     text-transform: uppercase;
     margin-top: 1em;
     margin-bottom: 0;
@@ -348,20 +347,20 @@
     line-height: 1.5;
   }
 
-  /* DIALOGUE: 168px left, right edge at ~487pt = right margin ~72px */
+  /* DIALOGUE: 180pt = 240px from page left, right ~487pt = 649px */
   .el-dialogue {
-    margin-left: 168px;
-    margin-right: 72px;
+    margin-left: 240px;
+    margin-right: 144px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
     line-height: 1.5;
   }
 
-  /* PARENTHETICAL: between dialogue and character indent */
+  /* PARENTHETICAL: between dialogue and character */
   .el-parenthetical {
-    margin-left: 210px;
-    margin-right: 130px;
+    margin-left: 288px;
+    margin-right: 192px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
@@ -370,9 +369,9 @@
   }
 
   .el-transition {
+    margin-right: 72px;
     text-align: right;
-    padding-right: 0;
-    margin: 1em 0;
+    margin-top: 1em;
     display: block;
     line-height: 1.5;
   }
@@ -842,17 +841,23 @@ function buildScriptDisplay() {
     div.dataset.idx = i;
     // Render each element type correctly
     if (el.type === 'scene_heading') {
-      // Parse "1 EXT. BOAT. DAY. 1" into: left-num, heading text, right-num
+      // Parse "1 EXT. BOAT. DAY. 1" → left number, heading text, right number
+      // Left number sits at 72px from page left (in the margin, before body text at 144px)
+      // Right number sits at 698px from page left (= 523pt × 1.333)
+      // .el-scene_heading has margin-left:144px, so:
+      //   left number offset from element = 72-144 = -72px (use absolute left:-72px)
+      //   right number: page 698px - 144px margin-left - element width... use absolute right
+      //   Right body edge ≈ 793-72=721px. Element right edge = 793-72=721px
+      //   Right number at 698px from page = 698-144=554px from element left
       const raw = el.text || '';
       const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
       if (m) {
         div.innerHTML =
-          `<span class="scene-num-left">${m[1]}</span>` +
-          `<span class="scene-heading-text">${m[2]}</span>` +
-          `<span class="scene-num-right">${m[3]}</span>`;
+          '<span style="position:absolute;left:-72px">' + m[1] + '</span>' +
+          '<span>' + m[2] + '</span>' +
+          '<span style="position:absolute;left:554px">' + m[3] + '</span>';
       } else {
-        // No numbers (e.g. un-numbered scenes)
-        div.innerHTML = `<span class="scene-heading-text">${raw}</span>`;
+        div.textContent = raw;
       }
     } else if (el.type === 'action') {
       div.textContent = el.text || '';
