@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 import edge_tts
 
 import os
-app = Flask(__name__, template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates'))
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'Templates'))
 CACHE_DIR = Path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audio_cache'))
 CACHE_DIR.mkdir(exist_ok=True)
 
