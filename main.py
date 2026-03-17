@@ -182,16 +182,21 @@ def parse_annotated_lines(lines):
                                "character": pending_char, "page": page_num, "para_break": para_break})
             i += 1; continue
 
-        # Dialogue
-        if state == "dialogue" and pending_char:
+        # Dialogue vs action-between-speeches:
+        # Dialogue is indented (x0 > action_threshold).
+        # Action lines between speeches have x0 near left margin.
+        # We use x0 > 100 as the threshold (dialogue is typically indented ~150pt+)
+        if state == "dialogue" and pending_char and x0 > 100:
             classified.append({"type": "dialogue", "text": stripped,
                                "character": pending_char, "page": page_num, "para_break": para_break})
             i += 1; continue
 
-        # Action
+        # Action (including action lines between dialogue speeches)
         classified.append({"type": "action", "text": stripped,
                            "page": page_num, "para_break": para_break})
-        state = "action"; pending_char = None; i += 1
+        # Don't reset pending_char for action between speeches — next speech still belongs to same char
+        # Only reset if there's a scene heading or explicit break
+        state = "action"; i += 1
 
     # Second pass: group consecutive same-type/same-character lines into paragraphs
     # Lines with para_break=True start a new element even if same type
