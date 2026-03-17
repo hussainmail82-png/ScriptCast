@@ -757,8 +757,11 @@ function buildScriptDisplay() {
     const div = document.createElement("div");
     div.className = `el el-${el.type}`;
     div.dataset.idx = i;
-    div.textContent = el.display_text || el.text;
-    div.onclick = () => jumpToIndex(i);
+if (el.type === 'character') {
+    div.innerHTML = el.display_text || el.text;
+} else {
+    div.innerHTML = (el.display_text || el.text).replace(/\n/g, '<br>');
+}    div.onclick = () => jumpToIndex(i);
     display.appendChild(div);
   });
 }
