@@ -186,7 +186,7 @@ def parse_annotated_lines(lines):
         # Dialogue is indented (x0 > action_threshold).
         # Action lines between speeches have x0 near left margin.
         # We use x0 > 100 as the threshold (dialogue is typically indented ~150pt+)
-        if state == "dialogue" and pending_char and x0 > 100:
+        if state == "dialogue" and pending_char and x0 > 150:
             classified.append({"type": "dialogue", "text": stripped,
                                "character": pending_char, "page": page_num, "para_break": para_break})
             i += 1; continue
