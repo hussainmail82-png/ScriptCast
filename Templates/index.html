@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ScriptCast — Professional Screenplay Audio Player</title>
+<style>
+  /* ── Tokens ───────────────────────────────────────────────── */
+  :root {
+    --bg:        #0d0f14;
+    --bg2:       #13161d;
+    --bg3:       #1a1e28;
+    --border:    #2a2f3e;
+    --accent:    #e8b84b;
+    --accent2:   #c49a30;
+    --text:      #e8e6df;
+    --muted:     #7a7d8a;
+    --danger:    #e05c5c;
+    --success:   #4caf7a;
+    --page-bg:   #fffef8;
+    --page-text: #1a1a1a;
+    --font-script: 'Courier New', Courier, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  #app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  header {
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg2);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+  .logo span { color: var(--text); font-weight: 300; }
+
+  .step-indicator {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .step-dot {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    transition: all .3s;
+  }
+  .step-dot.active  { border-color: var(--accent); color: var(--accent); }
+  .step-dot.done    { background: var(--accent); border-color: var(--accent); color: #000; }
+  .step-line { width: 32px; height: 1px; background: var(--border); }
+
+  main { flex: 1; padding: 40px 32px; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+  /* ── Screens ──────────────────────────────────────────────── */
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── Upload ───────────────────────────────────────────────── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 16px;
+    padding: 80px 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .3s;
+    background: var(--bg2);
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(232,184,75,.05);
+  }
+  .upload-icon { font-size: 48px; margin-bottom: 16px; }
+  .upload-zone h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
+  .upload-zone p  { color: var(--muted); font-size: 14px; }
+  .upload-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer;
+  }
+
+  .file-types {
+    display: flex; gap: 12px; justify-content: center; margin-top: 24px;
+  }
+  .badge {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: .5px;
+  }
+
+  /* ── Loading ──────────────────────────────────────────────── */
+  .loading-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 80px;
+    text-align: center;
+  }
+  .loading-screen.active { display: flex; }
+
+  .spinner {
+    width: 48px; height: 48px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Voice Assignment ─────────────────────────────────────── */
+  .cast-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-top: 24px;
+  }
+
+  .cast-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    transition: border-color .2s;
+  }
+  .cast-card:hover { border-color: var(--accent); }
+
+  .cast-char {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .cast-lines {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+
+  .cast-voice-select {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .cast-tags {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
+  }
+  .cast-tag {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  /* ── Buttons ──────────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 28px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all .2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+  .btn-primary:hover { background: var(--accent2); }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  .action-row {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 32px;
+  }
+
+  /* ── Playback ─────────────────────────────────────────────── */
+  #playback-screen { display: none; }
+  #playback-screen.active { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
+
+  /* Screenplay page */
+  .page-container {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .page-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .search-box {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: var(--text);
+    font-size: 13px;
+    width: 180px;
+  }
+
+  #script-display {
+    background: var(--page-bg);
+    min-height: 600px;
+    padding: 48px;
+    font-family: var(--font-script);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--page-text);
+    position: relative;
+  }
+
+  /* Screenplay element styles */
+  .el { padding: 2px 0; cursor: pointer; border-radius: 2px; transition: background .15s; }
+  .el:hover { background: rgba(232,184,75,.12); }
+  .el.playing { background: rgba(232,184,75,.25); }
+
+  .el-scene_heading {
+    text-transform: uppercase;
+    font-weight: bold;
+    margin: 16px 0 8px;
+    letter-spacing: .5px;
+  }
+  .el-character {
+    margin-left: 37%;
+    text-transform: uppercase;
+    font-weight: bold;
+    margin-top: 12px;
+  }
+  .el-dialogue {
+    margin-left: 17%;
+    margin-right: 25%;
+  }
+  .el-parenthetical {
+    margin-left: 27%;
+    margin-right: 33%;
+    font-style: italic;
+    color: #444;
+  }
+  .el-action { margin: 8px 0; }
+  .el-transition { text-align: right; margin: 12px 0; text-transform: uppercase; }
+
+  .page-header-bar {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-script);
+    font-size: 11px;
+    color: #888;
+    margin-bottom: 24px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #ddd;
+  }
+
+  .highlight { background: rgba(255,200,0,.4); border-radius: 2px; }
+
+  /* Playback controls */
+  .controls-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .now-playing {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .now-playing-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .now-playing-char {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .now-playing-text {
+    font-size: 13px;
+    color: var(--muted);
+    font-family: var(--font-script);
+    line-height: 1.5;
+    max-height: 80px;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+  }
+
+  .transport {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .transport-btns {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .t-btn {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--bg3);
+    color: var(--text);
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    transition: all .2s;
+  }
+  .t-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .t-btn.play-btn {
+    width: 56px; height: 56px;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #000;
+    font-size: 20px;
+  }
+  .t-btn.play-btn:hover { background: var(--accent2); }
+
+  .speed-row {
+    display: flex; gap: 6px;
+  }
+  .speed-pill {
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--bg3);
+    font-size: 12px;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .speed-pill.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
+
+  /* Dojo panel */
+  .dojo-panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .dojo-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: .5px;
+    margin-bottom: 4px;
+  }
+  .dojo-sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+  .dojo-char-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .dojo-char-row:last-child { border-bottom: none; }
+  .dojo-char-name { font-weight: 600; color: var(--text); }
+
+  .toggle-switch {
+    width: 36px; height: 20px;
+    background: var(--border);
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background .2s;
+    flex-shrink: 0;
+  }
+  .toggle-switch.active { background: var(--accent); }
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 14px; height: 14px;
+    background: #fff;
+    border-radius: 50%;
+    top: 3px; left: 3px;
+    transition: transform .2s;
+  }
+  .toggle-switch.active::after { transform: translateX(16px); }
+
+  .scene-jump {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .scene-select {
+    width: 100%;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  /* Page nav pill */
+  .page-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+  }
+  .page-nav button {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    padding: 4px 10px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: border-color .2s;
+  }
+  .page-nav button:hover { border-color: var(--accent); }
+  #page-label { color: var(--muted); min-width: 60px; text-align: center; }
+
+  /* Section headings */
+  .section-heading {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .section-sub {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 32px;
+  }
+
+  /* Error toast */
+  #toast {
+    position: fixed;
+    bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--danger);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    display: none;
+    z-index: 999;
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="logo">Script<span>Cast</span></div>
+    <div class="step-indicator">
+      <div class="step-dot active" id="dot-1">1</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot-2">2</div>
+      <div class="step-line"></div>
+      <div class="step-dot" id="dot-3">3</div>
+    </div>
+    <div style="width:120px"></div>
+  </header>
+
+  <main>
+
+    <!-- STEP 1: Upload -->
+    <div class="screen active" id="screen-upload">
+      <div class="section-heading">Upload your screenplay</div>
+      <div class="section-sub">Supports Final Draft (.fdx) and PDF formats</div>
+
+      <div class="upload-zone" id="drop-zone">
+        <input type="file" id="file-input" accept=".pdf,.fdx">
+        <div class="upload-icon">🎬</div>
+        <h2>Drop your screenplay here</h2>
+        <p>or click to browse</p>
+        <div class="file-types">
+          <span class="badge">PDF</span>
+          <span class="badge">FDX</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading-screen" id="loading-screen">
+      <div class="spinner"></div>
+      <div style="font-size:18px; font-weight:600;">Parsing screenplay…</div>
+      <div style="color:var(--muted); font-size:14px;" id="loading-msg">Detecting characters and structure</div>
+    </div>
+
+    <!-- STEP 2: Voice Assignment -->
+    <div class="screen" id="screen-cast">
+      <div class="section-heading">Auto-cast complete</div>
+      <div class="section-sub" id="cast-summary">Characters detected and matched to voices</div>
+      <div class="cast-grid" id="cast-grid"></div>
+      <div class="action-row">
+        <button class="btn btn-ghost" onclick="goUpload()">← Re-upload</button>
+        <button class="btn btn-primary" onclick="goPlayback()">Start playback →</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Playback -->
+    <div class="screen" id="playback-screen">
+
+      <!-- Script display -->
+      <div class="page-container">
+        <div class="page-toolbar">
+          <div class="page-nav">
+            <button onclick="prevPage()">‹</button>
+            <span id="page-label">Page 1</span>
+            <button onclick="nextPage()">›</button>
+          </div>
+          <input class="search-box" id="search-input" placeholder="Search script…" oninput="searchScript(this.value)">
+          <select class="scene-select" id="scene-select" onchange="jumpToScene(this.value)" style="width:auto; max-width:200px;">
+            <option value="">Jump to scene…</option>
+          </select>
+        </div>
+        <div id="script-display"></div>
+      </div>
+
+      <!-- Right panel -->
+      <div class="controls-panel">
+
+        <div class="now-playing">
+          <div class="now-playing-label">Now playing</div>
+          <div class="now-playing-char" id="np-char">—</div>
+          <div class="now-playing-text" id="np-text">Press play to begin</div>
+        </div>
+
+        <div class="transport">
+          <div class="transport-btns">
+            <button class="t-btn" onclick="skipBack()" title="Previous line">⏮</button>
+            <button class="t-btn play-btn" id="play-btn" onclick="togglePlay()">▶</button>
+            <button class="t-btn" onclick="skipForward()" title="Next line">⏭</button>
+          </div>
+          <div class="speed-row" id="speed-row">
+            <button class="speed-pill active" onclick="setSpeed(1,this)">1×</button>
+            <button class="speed-pill" onclick="setSpeed(1.25,this)">1.25×</button>
+            <button class="speed-pill" onclick="setSpeed(1.5,this)">1.5×</button>
+            <button class="speed-pill" onclick="setSpeed(2,this)">2×</button>
+          </div>
+        </div>
+
+        <div class="dojo-panel">
+          <div class="dojo-title">🎭 Actor's Dojo</div>
+          <div class="dojo-sub">Mute characters to rehearse your lines</div>
+          <div id="dojo-chars"></div>
+        </div>
+
+      </div>
+    </div><!-- /playback-screen -->
+
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────
+let elements    = [];
+let casting     = {};
+let pageMap     = {};
+let pageHeaders = {};
+let characters  = [];
+
+let currentIdx  = 0;
+let currentPage = 1;
+let playing     = false;
+let playSpeed   = 1.0;
+let mutedChars  = new Set();
+let audioQueue  = {};   // preloaded: idx -> ArrayBuffer
+let currentAudio = null;
+
+// ── Upload ───────────────────────────────────────────────────────────────
+const dropZone  = document.getElementById("drop-zone");
+const fileInput = document.getElementById("file-input");
+
+dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("dragover"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
+dropZone.addEventListener("drop", e => {
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
+  handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener("change", e => handleFile(e.target.files[0]));
+
+function handleFile(file) {
+  if (!file) return;
+  const ext = file.name.split(".").pop().toLowerCase();
+  if (!["pdf","fdx"].includes(ext)) { showToast("Please upload a .pdf or .fdx file"); return; }
+
+  showLoading("Parsing screenplay…");
+  const fd = new FormData();
+  fd.append("file", file);
+
+  fetch("/upload", { method: "POST", body: fd })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { hideLoading(); showToast(data.error); return; }
+      elements    = data.elements;
+      casting     = data.casting;
+      pageMap     = data.page_map;
+      pageHeaders = data.page_headers || {};
+      characters  = data.characters;
+      hideLoading();
+      buildCastScreen();
+      goScreen("screen-cast");
+      stepDone(1);
+    })
+    .catch(() => { hideLoading(); showToast("Upload failed — check server logs"); });
+}
+
+// ── Voice assignment screen ───────────────────────────────────────────────
+const VOICE_LABELS = {
+  "en-GB-RyanNeural":        "Ryan (British Male, 30s)",
+  "en-GB-SoniaNeural":       "Sonia (British Female, 30s)",
+  "en-GB-LibbyNeural":       "Libby (British Female, 20s)",
+  "en-GB-MaisieNeural":      "Maisie (British Female, Child)",
+  "en-GB-OliverNeural":      "Oliver (British Male, 20s)",
+  "en-GB-ThomasNeural":      "Thomas (British Male, 40s)",
+  "en-US-GuyNeural":         "Guy (American Male, 30s)",
+  "en-US-JennyNeural":       "Jenny (American Female, 30s)",
+  "en-US-AriaNeural":        "Aria (American Female, expressive)",
+  "en-US-DavisNeural":       "Davis (American Male, deep)",
+  "en-US-TonyNeural":        "Tony (American Male, raspy)",
+  "en-US-NancyNeural":       "Nancy (American Female, 40s)",
+  "en-AU-NatashaNeural":     "Natasha (Australian Female)",
+  "en-AU-WilliamNeural":     "William (Australian Male)",
+  "en-US-AnaNeural":         "Ana (American Female, Child)",
+  "en-US-BrandonNeural":     "Brandon (American Male, 20s)",
+  "en-US-ChristopherNeural": "Christopher (American Male, 40s)",
+  "en-US-ElizabethNeural":   "Elizabeth (American Female, 50s)",
+  "en-IE-ConnorNeural":      "Connor (Irish Male)",
+  "en-IE-EmilyNeural":       "Emily (Irish Female)",
+};
+
+function buildCastScreen() {
+  const grid = document.getElementById("cast-grid");
+  grid.innerHTML = "";
+
+  const lineCounts = {};
+  elements.forEach(e => { if (e.character) lineCounts[e.character] = (lineCounts[e.character]||0)+1; });
+
+  document.getElementById("cast-summary").textContent =
+    `${characters.length} characters detected · Auto-cast to distinct voices`;
+
+  characters.slice().sort((a,b) => (lineCounts[b]||0)-(lineCounts[a]||0)).forEach(char => {
+    const info = casting[char] || {};
+    const card = document.createElement("div");
+    card.className = "cast-card";
+
+    const selectOpts = Object.entries(VOICE_LABELS).map(([id, label]) =>
+      `<option value="${id}" ${id === info.voice_id ? "selected" : ""}>${label}</option>`
+    ).join("");
+
+    const tags = [info.accent, info.age, ...(info.profile?.traits||[])].filter(Boolean);
+    const tagsHtml = tags.map(t => `<span class="cast-tag">${t}</span>`).join("");
+
+    card.innerHTML = `
+      <div class="cast-char">${char}</div>
+      <div class="cast-lines">${lineCounts[char]||0} lines</div>
+      <select class="cast-voice-select" data-char="${char}" onchange="updateCast('${char}', this.value)">
+        ${selectOpts}
+      </select>
+      <div class="cast-tags">${tagsHtml}</div>`;
+
+    grid.appendChild(card);
+  });
+}
+
+function updateCast(char, voiceId) {
+  if (casting[char]) casting[char].voice_id = voiceId;
+}
+
+// ── Playback screen ───────────────────────────────────────────────────────
+function goPlayback() {
+  buildScriptDisplay();
+  buildDojoPanel();
+  buildSceneDropdown();
+  goScreen("playback-screen");
+  stepDone(2);
+  renderPage(1);
+  preloadAhead(0);
+}
+
+function buildScriptDisplay() {
+  const display = document.getElementById("script-display");
+  display.innerHTML = "";
+
+  elements.forEach((el, i) => {
+    const div = document.createElement("div");
+    div.className = `el el-${el.type}`;
+    div.dataset.idx = i;
+    div.textContent = el.display_text || el.text;
+    div.onclick = () => jumpToIndex(i);
+    display.appendChild(div);
+  });
+}
+
+function buildDojoPanel() {
+  const panel = document.getElementById("dojo-chars");
+  panel.innerHTML = "";
+  const lineCounts = {};
+  elements.forEach(e => { if (e.character) lineCounts[e.character] = (lineCounts[e.character]||0)+1; });
+
+  characters.slice().sort((a,b) => (lineCounts[b]||0)-(lineCounts[a]||0)).forEach(char => {
+    const row = document.createElement("div");
+    row.className = "dojo-char-row";
+    row.innerHTML = `
+      <span class="dojo-char-name">${char}</span>
+      <div class="toggle-switch active" id="toggle-${char.replace(/\s/g,'_')}" onclick="toggleMute('${char}')"></div>`;
+    panel.appendChild(row);
+  });
+}
+
+function toggleMute(char) {
+  const id = `toggle-${char.replace(/\s/g,'_')}`;
+  const el = document.getElementById(id);
+  if (mutedChars.has(char)) {
+    mutedChars.delete(char);
+    el.classList.add("active");
+  } else {
+    mutedChars.add(char);
+    el.classList.remove("active");
+  }
+}
+
+function buildSceneDropdown() {
+  const sel = document.getElementById("scene-select");
+  sel.innerHTML = '<option value="">Jump to scene…</option>';
+  elements.forEach((el, i) => {
+    if (el.type === "scene_heading") {
+      const opt = document.createElement("option");
+      opt.value = i;
+      opt.textContent = el.text.substring(0, 50);
+      sel.appendChild(opt);
+    }
+  });
+}
+
+function jumpToScene(idx) {
+  if (idx === "") return;
+  jumpToIndex(parseInt(idx));
+}
+
+// ── Page rendering ────────────────────────────────────────────────────────
+function renderPage(page) {
+  currentPage = page;
+  document.getElementById("page-label").textContent = `Page ${page}`;
+
+  const allEls = document.querySelectorAll(".el");
+  allEls.forEach(e => e.style.display = "none");
+
+  const indices = pageMap[String(page)] || [];
+  if (indices.length === 0) return;
+
+  indices.forEach(i => {
+    const el = document.querySelector(`.el[data-idx="${i}"]`);
+    if (el) el.style.display = "";
+  });
+
+  // Page header
+  const display = document.getElementById("script-display");
+  let header = display.querySelector(".page-header-bar");
+  if (!header) {
+    header = document.createElement("div");
+    header.className = "page-header-bar";
+    display.prepend(header);
+  }
+  const ph = pageHeaders[page] || pageHeaders[String(page)];
+  if (ph) {
+    const parts = ph.split(/\s{2,}/);
+    header.innerHTML = `<span>${parts[0]||""}</span><span>${parts[1]||page+"."}</span>`;
+  } else {
+    header.innerHTML = `<span></span><span>${page}.</span>`;
+  }
+
+  // Scroll to first visible element
+  const firstEl = document.querySelector(`.el[data-idx="${indices[0]}"]`);
+  if (firstEl) firstEl.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function prevPage() {
+  const pages = Object.keys(pageMap).map(Number);
+  const min = Math.min(...pages);
+  if (currentPage > min) renderPage(currentPage - 1);
+}
+
+function nextPage() {
+  const pages = Object.keys(pageMap).map(Number);
+  const max = Math.max(...pages);
+  if (currentPage < max) renderPage(currentPage + 1);
+}
+
+// ── Playback engine ───────────────────────────────────────────────────────
+function togglePlay() {
+  playing ? pause() : play();
+}
+
+function play() {
+  playing = true;
+  document.getElementById("play-btn").textContent = "⏸";
+  playNext();
+}
+
+function pause() {
+  playing = false;
+  document.getElementById("play-btn").textContent = "▶";
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+}
+
+async function playNext() {
+  if (!playing) return;
+
+  // Find next playable element
+  while (currentIdx < elements.length) {
+    const el = elements[currentIdx];
+    if (el.type === "dialogue" || el.type === "action") break;
+    if (el.type === "scene_heading") break;
+    currentIdx++;
+  }
+
+  if (currentIdx >= elements.length) {
+    pause();
+    showToast("End of screenplay");
+    return;
+  }
+
+  const el = elements[currentIdx];
+  highlightElement(currentIdx);
+  updateNowPlaying(el);
+  ensurePageVisible(currentIdx);
+  preloadAhead(currentIdx);
+
+  // Check if character is muted
+  if (el.character && mutedChars.has(el.character)) {
+    // Silence gap so actor can speak
+    await sleep(1200 / playSpeed);
+    currentIdx++;
+    playNext();
+    return;
+  }
+
+  // Non-dialogue scene headings — just advance after brief pause
+  if (el.type === "scene_heading") {
+    await sleep(600 / playSpeed);
+    currentIdx++;
+    playNext();
+    return;
+  }
+
+  // Get audio
+  try {
+    const audioData = await getAudio(currentIdx, el);
+    if (!playing) return;
+    await playAudio(audioData);
+    if (!playing) return;
+    currentIdx++;
+    playNext();
+  } catch(e) {
+    console.error("TTS error:", e);
+    currentIdx++;
+    playNext();
+  }
+}
+
+async function getAudio(idx, el) {
+  if (audioQueue[idx]) return audioQueue[idx];
+
+  const voiceId = (el.character && casting[el.character])
+    ? casting[el.character].voice_id
+    : "en-GB-RyanNeural";
+
+  // Find preceding parenthetical for sentiment
+  let parenthetical = "";
+  if (idx > 0 && elements[idx-1]?.type === "parenthetical") {
+    parenthetical = elements[idx-1].text;
+  }
+
+  const resp = await fetch("/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: el.text, voice_id: voiceId, parenthetical })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error);
+
+  const binary = atob(data.audio);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  audioQueue[idx] = bytes.buffer;
+  return audioQueue[idx];
+}
+
+function preloadAhead(fromIdx) {
+  for (let i = fromIdx; i < Math.min(fromIdx + 3, elements.length); i++) {
+    const el = elements[i];
+    if ((el.type === "dialogue" || el.type === "action") && !audioQueue[i] && el.character && !mutedChars.has(el.character)) {
+      getAudio(i, el).catch(() => {});
+    }
+  }
+}
+
+function playAudio(arrayBuffer) {
+  return new Promise((resolve, reject) => {
+    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
+    const url  = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.playbackRate = playSpeed;
+    audio.preservesPitch = true;
+    currentAudio = audio;
+    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
+    audio.onerror = reject;
+    audio.play().catch(reject);
+  });
+}
+
+function skipForward() {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  currentIdx = Math.min(currentIdx + 1, elements.length - 1);
+  if (playing) { playNext(); } else { highlightElement(currentIdx); updateNowPlaying(elements[currentIdx]); }
+}
+
+function skipBack() {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  currentIdx = Math.max(currentIdx - 1, 0);
+  if (playing) { playNext(); } else { highlightElement(currentIdx); updateNowPlaying(elements[currentIdx]); }
+}
+
+function jumpToIndex(idx) {
+  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  currentIdx = idx;
+  if (playing) playNext();
+  else { highlightElement(idx); updateNowPlaying(elements[idx]); }
+}
+
+function setSpeed(s, btn) {
+  playSpeed = s;
+  if (currentAudio) currentAudio.playbackRate = s;
+  document.querySelectorAll(".speed-pill").forEach(p => p.classList.remove("active"));
+  btn.classList.add("active");
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────
+function highlightElement(idx) {
+  document.querySelectorAll(".el.playing").forEach(e => e.classList.remove("playing"));
+  const el = document.querySelector(`.el[data-idx="${idx}"]`);
+  if (el) {
+    el.classList.add("playing");
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function updateNowPlaying(el) {
+  if (!el) return;
+  document.getElementById("np-char").textContent = el.character || (el.type === "scene_heading" ? "SCENE" : "NARRATION");
+  document.getElementById("np-text").textContent = el.text?.substring(0, 120) || "";
+}
+
+function ensurePageVisible(idx) {
+  const el = elements[idx];
+  if (!el) return;
+  const page = el.page || 1;
+  if (page !== currentPage) renderPage(page);
+}
+
+function searchScript(query) {
+  document.querySelectorAll(".highlight").forEach(e => {
+    e.outerHTML = e.textContent;
+  });
+  if (!query || query.length < 2) return;
+  const q = query.toLowerCase();
+  document.querySelectorAll(".el").forEach(el => {
+    const text = el.textContent;
+    if (text.toLowerCase().includes(q)) {
+      el.innerHTML = text.replace(new RegExp(`(${query})`, "gi"), '<span class="highlight">$1</span>');
+    }
+  });
+}
+
+// ── Navigation helpers ────────────────────────────────────────────────────
+function goUpload() {
+  pause();
+  elements = []; casting = {}; pageMap = {}; characters = [];
+  document.getElementById("file-input").value = "";
+  goScreen("screen-upload");
+  [1,2,3].forEach(n => {
+    document.getElementById(`dot-${n}`).className = "step-dot" + (n===1?" active":"");
+  });
+}
+
+function goScreen(id) {
+  document.querySelectorAll(".screen, .loading-screen, #playback-screen").forEach(s => {
+    s.classList.remove("active");
+    if (s.id !== "playback-screen") s.style.display = "";
+  });
+  const target = document.getElementById(id);
+  target.classList.add("active");
+}
+
+function showLoading(msg) {
+  document.getElementById("loading-msg").textContent = msg;
+  goScreen("loading-screen");
+}
+function hideLoading() {
+  document.getElementById("loading-screen").classList.remove("active");
+}
+
+function stepDone(n) {
+  document.getElementById(`dot-${n}`).className = "step-dot done";
+  if (n < 3) document.getElementById(`dot-${n+1}`).className = "step-dot active";
+}
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.style.display = "block";
+  setTimeout(() => t.style.display = "none", 3500);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+</script>
+</body>
+</html>
