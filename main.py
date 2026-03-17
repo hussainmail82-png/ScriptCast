@@ -11,8 +11,9 @@ import pdfplumber
 import xml.etree.ElementTree as ET
 import edge_tts
 
-app = Flask(__name__)
-CACHE_DIR = Path("./audio_cache")
+import os
+app = Flask(__name__, template_folder=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates'))
+CACHE_DIR = Path(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audio_cache'))
 CACHE_DIR.mkdir(exist_ok=True)
 
 # ---------------------------------------------------------------------------
