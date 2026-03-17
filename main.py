@@ -1,1194 +1,479 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ScriptCast — Professional Screenplay Audio Player</title>
-<style>
-  /* ── Tokens ───────────────────────────────────────────────── */
-  :root {
-    --bg:        #0d0f14;
-    --bg2:       #13161d;
-    --bg3:       #1a1e28;
-    --border:    #2a2f3e;
-    --accent:    #e8b84b;
-    --accent2:   #c49a30;
-    --text:      #e8e6df;
-    --muted:     #7a7d8a;
-    --danger:    #e05c5c;
-    --success:   #4caf7a;
-    --page-bg:   #fffef8;
-    --page-text: #1a1a1a;
-    --font-script: 'Courier New', Courier, monospace;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Segoe UI', system-ui, sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
-
-  /* ── Layout ───────────────────────────────────────────────── */
-  #app { display: flex; flex-direction: column; min-height: 100vh; }
-
-  header {
-    padding: 16px 32px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg2);
-    position: sticky; top: 0; z-index: 100;
-  }
-
-  .logo {
-    font-size: 20px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-    color: var(--accent);
-  }
-  .logo span { color: var(--text); font-weight: 300; }
-
-  .step-indicator {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .step-dot {
-    width: 28px; height: 28px;
-    border-radius: 50%;
-    border: 1.5px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 600;
-    transition: all .3s;
-  }
-  .step-dot.active  { border-color: var(--accent); color: var(--accent); }
-  .step-dot.done    { background: var(--accent); border-color: var(--accent); color: #000; }
-  .step-line { width: 32px; height: 1px; background: var(--border); }
-
-  main { flex: 1; padding: 40px 32px; max-width: 1200px; margin: 0 auto; width: 100%; }
-
-  /* ── Screens ──────────────────────────────────────────────── */
-  .screen { display: none; }
-  .screen.active { display: block; }
-
-  /* ── Upload ───────────────────────────────────────────────── */
-  .upload-zone {
-    border: 2px dashed var(--border);
-    border-radius: 16px;
-    padding: 80px 40px;
-    text-align: center;
-    cursor: pointer;
-    transition: all .3s;
-    background: var(--bg2);
-    position: relative;
-  }
-  .upload-zone:hover, .upload-zone.dragover {
-    border-color: var(--accent);
-    background: rgba(232,184,75,.05);
-  }
-  .upload-icon { font-size: 48px; margin-bottom: 16px; }
-  .upload-zone h2 { font-size: 22px; font-weight: 600; margin-bottom: 8px; }
-  .upload-zone p  { color: var(--muted); font-size: 14px; }
-  .upload-zone input[type=file] {
-    position: absolute; inset: 0; opacity: 0; cursor: pointer;
-  }
-
-  .file-types {
-    display: flex; gap: 12px; justify-content: center; margin-top: 24px;
-  }
-  .badge {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 4px 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--accent);
-    letter-spacing: .5px;
-  }
-
-  /* ── Loading ──────────────────────────────────────────────── */
-  .loading-screen {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 16px;
-    padding: 80px;
-    text-align: center;
-  }
-  .loading-screen.active { display: flex; }
-
-  .spinner {
-    width: 48px; height: 48px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── Voice Assignment ─────────────────────────────────────── */
-  .cast-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 16px;
-    margin-top: 24px;
-  }
-
-  .cast-card {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    transition: border-color .2s;
-  }
-  .cast-card:hover { border-color: var(--accent); }
-
-  .cast-char {
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: .5px;
-    color: var(--accent);
-    margin-bottom: 4px;
-  }
-  .cast-lines {
-    font-size: 12px;
-    color: var(--muted);
-    margin-bottom: 12px;
-  }
-
-  .cast-voice-select {
-    width: 100%;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    padding: 8px 12px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  .cast-tags {
-    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px;
-  }
-  .cast-tag {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 2px 8px;
-    font-size: 11px;
-    color: var(--muted);
-  }
-
-  /* ── Buttons ──────────────────────────────────────────────── */
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 28px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    border: none;
-    transition: all .2s;
-  }
-  .btn-primary {
-    background: var(--accent);
-    color: #000;
-  }
-  .btn-primary:hover { background: var(--accent2); }
-  .btn-ghost {
-    background: transparent;
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
-
-  .action-row {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    margin-top: 32px;
-  }
-
-  /* ── Playback ─────────────────────────────────────────────── */
-  #playback-screen { display: none; }
-  #playback-screen.active { display: grid; grid-template-columns: 1fr 320px; gap: 24px; }
-
-  /* Screenplay page */
-  .page-container {
-    background: #1a1a1a;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: auto;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
-  .page-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    border-bottom: 1px solid var(--border);
-    background: var(--bg3);
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-
-  .search-box {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 6px 12px;
-    color: var(--text);
-    font-size: 13px;
-    width: 180px;
-  }
-
-  /* A4 page — exact PDF measurements (595pt wide, 842pt tall)
-     Scale: 1pt = 1.333px at 96dpi
-     Measured from PDF:
-       Page left edge: 0
-       Scene/action text x0: 108pt = 144px
-       Dialogue x0: 180pt = 240px  
-       Character cue x0: 252pt = 336px
-       Right text edge: ~487pt, so right margin = 144px
-       Page padding (outer): 72px = 54pt (outer margin)
-  */
-  .page-wrapper {
-    background: var(--page-bg);
-    width: 793px;
-    min-height: 1057px;
-    margin: 0 auto;
-    box-shadow: 0 2px 20px rgba(0,0,0,0.25);
-    box-sizing: border-box;
-    flex-shrink: 0;
-  }
-
-  #script-display {
-    background: var(--page-bg);
-    width: 793px;
-    min-height: 1057px;
-    /* left=72px (=54pt outer margin), right=72px, top/bottom=72px */
-    padding: 72px 72px 72px 72px;
-    box-sizing: border-box;
-    font-family: var(--font-script);
-    font-size: 12px;
-    line-height: 1.5;
-    color: var(--page-text);
-    position: relative;
-    /* Content area = 793 - 144 = 649px wide */
-  }
-
-  /* Screenplay elements — pixel-perfect from PDF x0 measurements */
-  .el {
-    padding: 0;
-    cursor: pointer;
-    border-radius: 2px;
-    transition: background .15s;
-    display: block;
-    line-height: 1.5;
-  }
-  .el:hover { background: rgba(232,184,75,.12); }
-  .el.playing { background: rgba(232,184,75,.25); }
-
-  /* SCENE HEADING
-     Left number at x=0 (content left edge, in the margin)
-     Heading text indented 72px (= 54pt margin width)
-     Right number at x=626px, right-aligned
-  */
-  .el-scene_heading {
-    font-weight: bold;
-    margin: 1.4em 0 0;
-    display: block;
-    line-height: 1.5;
-    position: relative;
-    padding-left: 72px;  /* indent text to match body */
-  }
-  .scene-num-left {
-    position: absolute;
-    left: 0;
-  }
-  .scene-num-right {
-    position: absolute;
-    left: 626px;
-  }
-  .scene-heading-text {
-    display: inline;
-  }
-
-  /* ACTION: indented 72px to match body text x0=108pt */
-  .el-action {
-    margin: 0;
-    margin-top: 1em;
-    padding-left: 72px;
-    display: block;
-    line-height: 1.5;
-  }
-
-  /* CHARACTER CUE: 264px from content left */
-  .el-character {
-    margin-left: 264px;
-    text-transform: uppercase;
-    margin-top: 1em;
-    margin-bottom: 0;
-    display: block;
-    line-height: 1.5;
-  }
-
-  /* DIALOGUE: 168px left, right edge at ~487pt = right margin ~72px */
-  .el-dialogue {
-    margin-left: 168px;
-    margin-right: 72px;
-    margin-top: 0;
-    margin-bottom: 0;
-    display: block;
-    line-height: 1.5;
-  }
-
-  /* PARENTHETICAL: between dialogue and character indent */
-  .el-parenthetical {
-    margin-left: 210px;
-    margin-right: 130px;
-    margin-top: 0;
-    margin-bottom: 0;
-    display: block;
-    line-height: 1.5;
-    font-style: italic;
-  }
-
-  .el-transition {
-    text-align: right;
-    padding-right: 0;
-    margin: 1em 0;
-    display: block;
-    line-height: 1.5;
-  }
-
-  .page-header-bar {
-    display: flex;
-    justify-content: space-between;
-    font-family: var(--font-script);
-    font-size: 11px;
-    color: #888;
-    margin-bottom: 24px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #ddd;
-  }
-
-  .highlight { background: rgba(255,200,0,.4); border-radius: 2px; }
-
-  /* Playback controls */
-  .controls-panel {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .now-playing {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .now-playing-label {
-    font-size: 11px;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 8px;
-  }
-  .now-playing-char {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--accent);
-    margin-bottom: 4px;
-  }
-  .now-playing-text {
-    font-size: 13px;
-    color: var(--muted);
-    font-family: var(--font-script);
-    line-height: 1.5;
-    max-height: 80px;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 4;
-    -webkit-box-orient: vertical;
-  }
-
-  .transport {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    align-items: center;
-  }
-
-  .transport-btns {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-  }
-
-  .t-btn {
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    border: 1.5px solid var(--border);
-    background: var(--bg3);
-    color: var(--text);
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 16px;
-    transition: all .2s;
-  }
-  .t-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-  .t-btn.play-btn {
-    width: 56px; height: 56px;
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #000;
-    font-size: 20px;
-  }
-  .t-btn.play-btn:hover { background: var(--accent2); }
-
-  .speed-row {
-    display: flex; gap: 6px;
-  }
-  .speed-pill {
-    padding: 4px 10px;
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    background: var(--bg3);
-    font-size: 12px;
-    color: var(--muted);
-    cursor: pointer;
-    transition: all .2s;
-  }
-  .speed-pill.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
-
-  /* Dojo panel */
-  .dojo-panel {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .dojo-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: .5px;
-    margin-bottom: 4px;
-  }
-  .dojo-sub {
-    font-size: 11px;
-    color: var(--muted);
-    margin-bottom: 16px;
-  }
-  .dojo-char-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-  }
-  .dojo-char-row:last-child { border-bottom: none; }
-  .dojo-char-name { font-weight: 600; color: var(--text); }
-
-  .toggle-switch {
-    width: 36px; height: 20px;
-    background: var(--border);
-    border-radius: 10px;
-    position: relative;
-    cursor: pointer;
-    transition: background .2s;
-    flex-shrink: 0;
-  }
-  .toggle-switch.active { background: var(--accent); }
-  .toggle-switch::after {
-    content: '';
-    position: absolute;
-    width: 14px; height: 14px;
-    background: #fff;
-    border-radius: 50%;
-    top: 3px; left: 3px;
-    transition: transform .2s;
-  }
-  .toggle-switch.active::after { transform: translateX(16px); }
-
-  .scene-jump {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
-  .scene-select {
-    width: 100%;
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    padding: 8px 12px;
-    font-size: 13px;
-    cursor: pointer;
-  }
-
-  /* Page nav pill */
-  .page-nav {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-  }
-  .page-nav button {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--text);
-    padding: 4px 10px;
-    cursor: pointer;
-    font-size: 13px;
-    transition: border-color .2s;
-  }
-  .page-nav button:hover { border-color: var(--accent); }
-  #page-label { color: var(--muted); min-width: 60px; text-align: center; }
-
-  /* Section headings */
-  .section-heading {
-    font-size: 24px;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-  .section-sub {
-    color: var(--muted);
-    font-size: 14px;
-    margin-bottom: 32px;
-  }
-
-  /* Error toast */
-  #toast {
-    position: fixed;
-    bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--danger);
-    color: #fff;
-    padding: 12px 24px;
-    border-radius: 8px;
-    font-size: 14px;
-    display: none;
-    z-index: 999;
-  }
-</style>
-</head>
-<body>
-<div id="app">
-
-  <header>
-    <div class="logo">Script<span>Cast</span></div>
-    <div class="step-indicator">
-      <div class="step-dot active" id="dot-1">1</div>
-      <div class="step-line"></div>
-      <div class="step-dot" id="dot-2">2</div>
-      <div class="step-line"></div>
-      <div class="step-dot" id="dot-3">3</div>
-    </div>
-    <div style="width:120px"></div>
-  </header>
-
-  <main>
-
-    <!-- STEP 1: Upload -->
-    <div class="screen active" id="screen-upload">
-      <div class="section-heading">Upload your screenplay</div>
-      <div class="section-sub">Supports Final Draft (.fdx) and PDF formats</div>
-
-      <div class="upload-zone" id="drop-zone">
-        <input type="file" id="file-input" accept=".pdf,.fdx">
-        <div class="upload-icon">🎬</div>
-        <h2>Drop your screenplay here</h2>
-        <p>or click to browse</p>
-        <div class="file-types">
-          <span class="badge">PDF</span>
-          <span class="badge">FDX</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Loading -->
-    <div class="loading-screen" id="loading-screen">
-      <div class="spinner"></div>
-      <div style="font-size:18px; font-weight:600;">Parsing screenplay…</div>
-      <div style="color:var(--muted); font-size:14px;" id="loading-msg">Detecting characters and structure</div>
-    </div>
-
-    <!-- STEP 2: Voice Assignment -->
-    <div class="screen" id="screen-cast">
-      <div class="section-heading">Auto-cast complete</div>
-      <div class="section-sub" id="cast-summary">Characters detected and matched to voices</div>
-      <div class="cast-grid" id="cast-grid"></div>
-      <div class="action-row">
-        <button class="btn btn-ghost" onclick="goUpload()">← Re-upload</button>
-        <button class="btn btn-primary" onclick="goPlayback()">Start playback →</button>
-      </div>
-    </div>
-
-    <!-- STEP 3: Playback -->
-    <div class="screen" id="playback-screen">
-
-      <!-- Script display -->
-      <div class="page-container">
-        <div class="page-toolbar">
-          <div class="page-nav">
-            <button onclick="prevPage()">‹</button>
-            <span id="page-label">Page 1</span>
-            <button onclick="nextPage()">›</button>
-          </div>
-          <input class="search-box" id="search-input" placeholder="Search script…" oninput="searchScript(this.value)">
-          <select class="scene-select" id="scene-select" onchange="jumpToScene(this.value)" style="width:auto; max-width:200px;">
-            <option value="">Jump to scene…</option>
-          </select>
-        </div>
-        <div class="page-wrapper"><div id="script-display"></div></div>
-      </div>
-
-      <!-- Right panel -->
-      <div class="controls-panel">
-
-        <div class="now-playing">
-          <div class="now-playing-label">Now playing</div>
-          <div class="now-playing-char" id="np-char">—</div>
-          <div class="now-playing-text" id="np-text">Press play to begin</div>
-        </div>
-
-        <div class="transport">
-          <div class="transport-btns">
-            <button class="t-btn" onclick="skipBack()" title="Previous line">⏮</button>
-            <button class="t-btn play-btn" id="play-btn" onclick="togglePlay()">▶</button>
-            <button class="t-btn" onclick="skipForward()" title="Next line">⏭</button>
-          </div>
-          <div class="speed-row" id="speed-row">
-            <button class="speed-pill active" onclick="setSpeed(1,this)">1×</button>
-            <button class="speed-pill" onclick="setSpeed(1.25,this)">1.25×</button>
-            <button class="speed-pill" onclick="setSpeed(1.5,this)">1.5×</button>
-            <button class="speed-pill" onclick="setSpeed(2,this)">2×</button>
-          </div>
-        </div>
-
-        <div class="dojo-panel">
-          <div class="dojo-title">🎭 Actor's Dojo</div>
-          <div class="dojo-sub">Mute characters to rehearse your lines</div>
-          <div id="dojo-chars"></div>
-        </div>
-
-      </div>
-    </div><!-- /playback-screen -->
-
-  </main>
-</div>
-
-<div id="toast"></div>
-
-<script>
-// ── State ────────────────────────────────────────────────────────────────
-let elements    = [];
-let casting     = {};
-let pageMap     = {};
-let pageHeaders = {};
-let characters  = [];
-
-let currentIdx  = 0;
-let currentPage = 1;
-let playing     = false;
-let playSpeed   = 1.0;
-let mutedChars  = new Set();
-let audioQueue  = {};   // preloaded: idx -> ArrayBuffer
-let currentAudio = null;
-
-// ── Upload ───────────────────────────────────────────────────────────────
-const dropZone  = document.getElementById("drop-zone");
-const fileInput = document.getElementById("file-input");
-
-dropZone.addEventListener("dragover",  e => { e.preventDefault(); dropZone.classList.add("dragover"); });
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-dropZone.addEventListener("drop", e => {
-  e.preventDefault();
-  dropZone.classList.remove("dragover");
-  handleFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener("change", e => handleFile(e.target.files[0]));
-
-function handleFile(file) {
-  if (!file) return;
-  const ext = file.name.split(".").pop().toLowerCase();
-  if (!["pdf","fdx"].includes(ext)) { showToast("Please upload a .pdf or .fdx file"); return; }
-
-  showLoading("Parsing screenplay…");
-  const fd = new FormData();
-  fd.append("file", file);
-
-  fetch("/upload", { method: "POST", body: fd })
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) { hideLoading(); showToast(data.error); return; }
-      elements    = data.elements;
-      casting     = data.casting;
-      pageMap     = data.page_map;
-      pageHeaders = data.page_headers || {};
-      characters  = data.characters;
-      hideLoading();
-      buildCastScreen();
-      goScreen("screen-cast");
-      stepDone(1);
-    })
-    .catch(() => { hideLoading(); showToast("Upload failed — check server logs"); });
+import os
+import re
+import hashlib
+import asyncio
+from pathlib import Path
+from flask import Flask, request, jsonify, render_template
+from collections import Counter
+
+import pdfplumber
+import xml.etree.ElementTree as ET
+import edge_tts
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'Templates'))
+CACHE_DIR = Path(os.path.join(BASE_DIR, 'audio_cache'))
+CACHE_DIR.mkdir(exist_ok=True)
+
+UNICODE_MAP = {
+    "\u2018": "'", "\u2019": "'",
+    "\u201c": '"', "\u201d": '"',
+    "\u2026": "...", "\u2013": "-", "\u2014": "--",
 }
 
-// ── Voice assignment screen ───────────────────────────────────────────────
-const VOICE_LABELS = {
-  "en-GB-RyanNeural":        "Ryan (British Male, 30s)",
-  "en-GB-SoniaNeural":       "Sonia (British Female, 30s)",
-  "en-GB-LibbyNeural":       "Libby (British Female, 20s)",
-  "en-GB-MaisieNeural":      "Maisie (British Female, Child)",
-  "en-GB-OliverNeural":      "Oliver (British Male, 20s)",
-  "en-GB-ThomasNeural":      "Thomas (British Male, 40s)",
-  "en-US-GuyNeural":         "Guy (American Male, 30s)",
-  "en-US-JennyNeural":       "Jenny (American Female, 30s)",
-  "en-US-AriaNeural":        "Aria (American Female, expressive)",
-  "en-US-DavisNeural":       "Davis (American Male, deep)",
-  "en-US-TonyNeural":        "Tony (American Male, raspy)",
-  "en-US-NancyNeural":       "Nancy (American Female, 40s)",
-  "en-AU-NatashaNeural":     "Natasha (Australian Female)",
-  "en-AU-WilliamNeural":     "William (Australian Male)",
-  "en-US-AnaNeural":         "Ana (American Female, Child)",
-  "en-US-BrandonNeural":     "Brandon (American Male, 20s)",
-  "en-US-ChristopherNeural": "Christopher (American Male, 40s)",
-  "en-US-ElizabethNeural":   "Elizabeth (American Female, 50s)",
-  "en-IE-ConnorNeural":      "Connor (Irish Male)",
-  "en-IE-EmilyNeural":       "Emily (Irish Female)",
-};
+def normalise(text):
+    for src, dst in UNICODE_MAP.items():
+        text = text.replace(src, dst)
+    return text
 
-function buildCastScreen() {
-  const grid = document.getElementById("cast-grid");
-  grid.innerHTML = "";
-
-  const lineCounts = {};
-  elements.forEach(e => { if (e.character) lineCounts[e.character] = (lineCounts[e.character]||0)+1; });
-
-  document.getElementById("cast-summary").textContent =
-    `${characters.length} characters detected · Auto-cast to distinct voices`;
-
-  characters.slice().sort((a,b) => (lineCounts[b]||0)-(lineCounts[a]||0)).forEach(char => {
-    const info = casting[char] || {};
-    const card = document.createElement("div");
-    card.className = "cast-card";
-
-    const selectOpts = Object.entries(VOICE_LABELS).map(([id, label]) =>
-      `<option value="${id}" ${id === info.voice_id ? "selected" : ""}>${label}</option>`
-    ).join("");
-
-    const tags = [info.accent, info.age, ...(info.profile?.traits||[])].filter(Boolean);
-    const tagsHtml = tags.map(t => `<span class="cast-tag">${t}</span>`).join("");
-
-    card.innerHTML = `
-      <div class="cast-char">${char}</div>
-      <div class="cast-lines">${lineCounts[char]||0} lines</div>
-      <select class="cast-voice-select" data-char="${char}" onchange="updateCast('${char}', this.value)">
-        ${selectOpts}
-      </select>
-      <div class="cast-tags">${tagsHtml}</div>`;
-
-    grid.appendChild(card);
-  });
+ABBREV = {
+    r"\bMR\.": "Mister", r"\bMRS\.": "Missus", r"\bDR\.": "Doctor",
+    r"\bINT\.": "Interior", r"\bEXT\.": "Exterior",
+    r"\bV\.O\.": "Voice Over", r"\bO\.S\.": "Off Screen",
+    r"\bO\.C\.": "Off Camera", r"\bSGT\.": "Sergeant",
+    r"\bCONT'D\b": "Continued",
+    r"\.\.\.": " (pause) ", r"--": " (pause) ",
 }
 
-function updateCast(char, voiceId) {
-  if (casting[char]) casting[char].voice_id = voiceId;
+def expand_abbrevs(text):
+    for pattern, replacement in ABBREV.items():
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return text
+
+SCENE_HEADING = re.compile(
+    r"^\s*(?:(\d+[A-Z]?)\s+)?(?:[A-Z]+\.\s*)?(INT\.?|EXT\.?|INT\.?/EXT\.?|I/E\.?|EST\.?)\s*-?\s*(.+?)(?:\s+(\d+[A-Z]?))?\s*$",
+    re.IGNORECASE
+)
+SCENE_HEADING_NUMBERED = re.compile(
+    r"^\s*(\d+[A-Z]?)\s+(.+?)\s*-\s*(DAY|NIGHT|MORNING|EVENING|DAWN|DUSK|CONTINUOUS|LATER|MOMENTS LATER|SAME TIME|SAME)\s*(\d+[A-Z]?)?\s*$",
+    re.IGNORECASE
+)
+TRANSITION_PAT    = re.compile(r"^\s*([A-Z ]+TO:|FADE (?:IN|OUT)\.|FADE TO BLACK\.|SMASH CUT TO:|DISSOLVE TO:|CUT TO:)\s*$")
+CHARACTER_CUE     = re.compile(r"^\s*([A-Z0-9][A-Z0-9 .\'\-]*)\s*(?:\(([^)]+)\))?\s*$")
+PARENTHETICAL_PAT = re.compile(r"^\s*\((.+)\)\s*$")
+PAGE_NUMBER_PAT   = re.compile(r"^\d+\.?$")
+CONTINUED_PAT     = re.compile(r"^\s*\(?(?:CONTINUED|CONT'D)\)?:?\s*$", re.IGNORECASE)
+PAGE_HEADER_PAT   = re.compile(r"^\s*\d+\s*(?:CONTINUED|CONT'D)", re.IGNORECASE)
+REVISION_HEADER   = re.compile(r"(?:Blue|Pink|Yellow|Green|Goldenrod|Buff|Salmon|Cherry|White)\s+Rev\.", re.IGNORECASE)
+NON_CHARACTER_PAT = re.compile(
+    r"^\s*(?:WRITTEN BY|DIRECTED BY|PRODUCED BY|FADE IN\.?|FADE OUT\.?|THE END|TITLE CARD|SUPER|SMASH CUT|CUT TO|DISSOLVE TO|BLACK)\s*$",
+    re.IGNORECASE
+)
+CHAR_EXTENSION = re.compile(r"\s*\([^)]*\)\s*")
+
+def strip_extension(name):
+    return CHAR_EXTENSION.sub("", name).strip()
+
+def is_skip_line(s):
+    return bool(PAGE_NUMBER_PAT.match(s) or CONTINUED_PAT.match(s) or
+                PAGE_HEADER_PAT.match(s) or REVISION_HEADER.search(s))
+
+# ---------------------------------------------------------------------------
+# PDF Parser — line-by-line with paragraph grouping for display only
+# ---------------------------------------------------------------------------
+def parse_pdf(file_path):
+    elements = []
+    page_headers = {}
+
+    with pdfplumber.open(file_path) as pdf:
+        for page_num, page in enumerate(pdf.pages, 1):
+            words = page.extract_words(extra_attrs=["fontname", "size"])
+            if not words:
+                continue
+
+            # Page header zone (y < 50)
+            header_words = [w for w in words if float(w["top"]) < 50]
+            if header_words:
+                hl = " ".join(w["text"] for w in sorted(header_words, key=lambda w: w["x0"]))
+                if len(hl) >= 8 and all(hl[i] == hl[i+1] for i in range(0, min(8, len(hl)-1), 2)):
+                    hl = hl[::2]
+                page_headers[page_num] = hl
+
+            # Group words into lines by y-coordinate (±3pt tolerance)
+            content_words = [w for w in words if float(w["top"]) >= 50]
+            lines_dict = {}
+            for w in content_words:
+                y_key = round(float(w["top"]) / 3) * 3
+                lines_dict.setdefault(y_key, []).append(w)
+
+            sorted_ykeys = sorted(lines_dict.keys())
+
+            # Estimate normal line height from most common gap
+            gaps = [sorted_ykeys[i+1] - sorted_ykeys[i] for i in range(len(sorted_ykeys)-1)]
+            gap_counts = Counter(round(g/2)*2 for g in gaps if 8 < g < 30)
+            normal_lh = gap_counts.most_common(1)[0][0] if gap_counts else 14
+            para_threshold = normal_lh * 1.35
+
+            # Build list of (page, text, x0, is_para_break_before)
+            annotated = []
+            for idx, y_key in enumerate(sorted_ykeys):
+                line_words = sorted(lines_dict[y_key], key=lambda w: w["x0"])
+                text = normalise(" ".join(w["text"] for w in line_words))
+                x0 = float(line_words[0]["x0"])
+                para_break = (idx > 0 and (y_key - sorted_ykeys[idx-1]) > para_threshold)
+                annotated.append((page_num, text, x0, para_break))
+
+            elements.extend(parse_annotated_lines(annotated))
+
+    return elements, page_headers
+
+
+def parse_annotated_lines(lines):
+    """
+    Parse lines with paragraph-break hints.
+    Key insight: classify line-by-line (for character detection etc.)
+    but group consecutive lines of the SAME paragraph into one element
+    for display so text reflows correctly.
+    """
+    elements = []
+    state = "action"
+    pending_char = None
+
+    # First pass: classify each line
+    classified = []
+    i = 0
+    while i < len(lines):
+        page_num, text, x0, para_break = lines[i]
+        stripped = text.strip()
+
+        if is_skip_line(stripped):
+            i += 1
+            continue
+
+        if not stripped:
+            if state == "action":
+                pending_char = None
+            i += 1
+            continue
+
+        # Scene heading
+        if SCENE_HEADING.match(stripped) or SCENE_HEADING_NUMBERED.match(stripped):
+            classified.append({"type": "scene_heading", "text": stripped.upper(),
+                               "page": page_num, "para_break": para_break})
+            state = "action"; pending_char = None; i += 1; continue
+
+        # Transition
+        if TRANSITION_PAT.match(stripped):
+            classified.append({"type": "transition", "text": stripped,
+                               "page": page_num, "para_break": para_break})
+            state = "action"; pending_char = None; i += 1; continue
+
+        # Character cue — must be ALL CAPS single line, not a non-character
+        has_lower = any(c.islower() for c in stripped)
+        if (CHARACTER_CUE.match(stripped) and not has_lower and
+                not NON_CHARACTER_PAT.match(stripped)):
+            # Peek ahead: next non-blank must be dialogue/paren
+            next_text = next((lines[j][1].strip() for j in range(i+1, min(i+5, len(lines)))
+                             if lines[j][1].strip()), "")
+            if (next_text and not SCENE_HEADING.match(next_text) and
+                    not TRANSITION_PAT.match(next_text) and
+                    not (CHARACTER_CUE.match(next_text) and not any(c.islower() for c in next_text))):
+                char_name = strip_extension(stripped)
+                if char_name:
+                    pending_char = char_name; state = "dialogue"
+                    classified.append({"type": "character", "text": char_name,
+                                       "display_text": stripped, "character": char_name,
+                                       "page": page_num, "para_break": para_break})
+                    i += 1; continue
+
+        # Parenthetical
+        if state == "dialogue" and PARENTHETICAL_PAT.match(stripped):
+            classified.append({"type": "parenthetical", "text": stripped,
+                               "character": pending_char, "page": page_num, "para_break": para_break})
+            i += 1; continue
+
+        # Dialogue vs action-between-speeches:
+        # Dialogue is indented (x0 > action_threshold).
+        # Action lines between speeches have x0 near left margin.
+        # We use x0 > 100 as the threshold (dialogue is typically indented ~150pt+)
+        if state == "dialogue" and pending_char and x0 > 150:
+            classified.append({"type": "dialogue", "text": stripped,
+                               "character": pending_char, "page": page_num, "para_break": para_break})
+            i += 1; continue
+
+        # Action (including action lines between dialogue speeches)
+        classified.append({"type": "action", "text": stripped,
+                           "page": page_num, "para_break": para_break})
+        # Don't reset pending_char for action between speeches — next speech still belongs to same char
+        # Only reset if there's a scene heading or explicit break
+        state = "action"; i += 1
+
+    # Second pass: group consecutive same-type/same-character lines into paragraphs
+    # Lines with para_break=True start a new element even if same type
+    i = 0
+    while i < len(classified):
+        el = classified[i]
+        etype = el["type"]
+
+        # Character cues and scene headings are always single elements
+        if etype in ("character", "scene_heading", "transition", "parenthetical"):
+            out = dict(el)
+            out.setdefault("display_text", el["text"])
+            elements.append(out)
+            i += 1
+            continue
+
+        # Action and dialogue: group lines that belong to the same paragraph
+        j = i + 1
+        group_texts = [el["text"]]
+        while (j < len(classified) and
+               classified[j]["type"] == etype and
+               classified[j].get("character") == el.get("character") and
+               not classified[j]["para_break"]):
+            group_texts.append(classified[j]["text"])
+            j += 1
+
+        out = dict(el)
+        out["text"] = " ".join(group_texts)
+        out["display_text"] = " ".join(group_texts)  # reflow — no \n
+        elements.append(out)
+        i = j
+
+    return elements
+
+
+# ---------------------------------------------------------------------------
+# FDX Parser
+# ---------------------------------------------------------------------------
+def parse_fdx(file_path):
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+    elements = []
+    pending_char = None
+    for para in root.iter("Paragraph"):
+        ptype = para.get("Type", "Action")
+        text = normalise("".join(t.text or "" for t in para.iter("Text")).strip())
+        if not text:
+            continue
+        if ptype == "Scene Heading":
+            elements.append({"type": "scene_heading", "text": text.upper(),
+                             "display_text": text.upper(), "page": 1})
+            pending_char = None
+        elif ptype == "Transition":
+            elements.append({"type": "transition", "text": text, "display_text": text, "page": 1})
+            pending_char = None
+        elif ptype == "Character":
+            char_name = strip_extension(text); pending_char = char_name
+            elements.append({"type": "character", "text": char_name, "display_text": text,
+                             "character": char_name, "page": 1})
+        elif ptype == "Parenthetical":
+            elements.append({"type": "parenthetical", "text": text, "display_text": text,
+                             "character": pending_char, "page": 1})
+        elif ptype == "Dialogue":
+            elements.append({"type": "dialogue", "text": text, "display_text": text,
+                             "character": pending_char, "page": 1})
+        else:
+            elements.append({"type": "action", "text": text, "display_text": text, "page": 1})
+            pending_char = None
+    return elements, {}
+
+
+# ---------------------------------------------------------------------------
+# Auto-cast
+# ---------------------------------------------------------------------------
+GENDER_MALE   = {"he","him","his","man","boy","father","dad","brother","son","uncle","grandfather","husband","mr","sir","gentleman","male","guy","dude","lad"}
+GENDER_FEMALE = {"she","her","woman","girl","mother","mom","mum","sister","daughter","aunt","grandmother","wife","mrs","ms","miss","lady","female","gal","lass"}
+AGE_KEYWORDS  = {
+    "child":{"child","kid","young","teenager","teen","baby","infant","toddler"},
+    "20s":{"twenties","twenty","college"},"30s":{"thirties","thirty","adult"},
+    "40s":{"forties","forty","middle-aged"},"50s":{"fifties","fifty","mature"},
+    "60s":{"sixties","sixty","senior"},"elderly":{"elderly","old","aged","ancient","veteran"},
+}
+ACCENT_KEYWORDS = {
+    "british":{"british","english","london","cockney","scottish","irish","welsh","posh"},
+    "american":{"american","brooklyn","texan","southern","midwestern","california"},
+    "australian":{"australian","aussie"},
+}
+TRAIT_KEYWORDS = {
+    "deep":{"deep","bass","baritone","low","booming"},"high":{"high","squeaky","shrill"},
+    "raspy":{"raspy","gruff","gravelly","hoarse"},"soft":{"soft","gentle","quiet","whispery"},
+    "warm":{"warm","friendly","inviting"},"bright":{"bright","cheerful","energetic","bubbly"},
+}
+VOICE_LIBRARY = [
+    {"id":"en-GB-RyanNeural","gender":"male","accent":"british","age":"30s","traits":["warm","smooth"]},
+    {"id":"en-GB-SoniaNeural","gender":"female","accent":"british","age":"30s","traits":["warm","clear"]},
+    {"id":"en-GB-LibbyNeural","gender":"female","accent":"british","age":"20s","traits":["bright","soft"]},
+    {"id":"en-GB-MaisieNeural","gender":"female","accent":"british","age":"child","traits":["bright"]},
+    {"id":"en-GB-OliverNeural","gender":"male","accent":"british","age":"20s","traits":["warm","friendly"]},
+    {"id":"en-GB-ThomasNeural","gender":"male","accent":"british","age":"40s","traits":["deep","authoritative"]},
+    {"id":"en-US-GuyNeural","gender":"male","accent":"american","age":"30s","traits":["deep","authoritative"]},
+    {"id":"en-US-JennyNeural","gender":"female","accent":"american","age":"30s","traits":["warm","clear"]},
+    {"id":"en-US-AriaNeural","gender":"female","accent":"american","age":"30s","traits":["expressive","bright"]},
+    {"id":"en-US-DavisNeural","gender":"male","accent":"american","age":"30s","traits":["deep","smooth"]},
+    {"id":"en-US-TonyNeural","gender":"male","accent":"american","age":"40s","traits":["deep","raspy"]},
+    {"id":"en-US-NancyNeural","gender":"female","accent":"american","age":"40s","traits":["warm","authoritative"]},
+    {"id":"en-AU-NatashaNeural","gender":"female","accent":"australian","age":"30s","traits":["bright","clear"]},
+    {"id":"en-AU-WilliamNeural","gender":"male","accent":"australian","age":"30s","traits":["warm","deep"]},
+    {"id":"en-US-AnaNeural","gender":"female","accent":"american","age":"child","traits":["bright"]},
+    {"id":"en-US-BrandonNeural","gender":"male","accent":"american","age":"20s","traits":["bright","warm"]},
+    {"id":"en-US-ChristopherNeural","gender":"male","accent":"american","age":"40s","traits":["deep","authoritative"]},
+    {"id":"en-US-ElizabethNeural","gender":"female","accent":"american","age":"50s","traits":["warm","mature"]},
+    {"id":"en-IE-ConnorNeural","gender":"male","accent":"british","age":"30s","traits":["warm","friendly"]},
+    {"id":"en-IE-EmilyNeural","gender":"female","accent":"british","age":"20s","traits":["soft","warm"]},
+]
+
+def scrape_character_profile(char_name, elements):
+    first_idx = next((i for i, e in enumerate(elements) if e.get("character") == char_name), None)
+    if first_idx is None: return {}
+    words = set()
+    for el in elements[max(0,first_idx-5):min(len(elements),first_idx+10)]:
+        if el["type"] == "action":
+            tl = el["text"].lower()
+            if char_name.lower() in tl:
+                idx = tl.index(char_name.lower())
+                words.update(tl[max(0,idx-50):idx+80].split())
+    pw = set(); pc = 0
+    for el in elements:
+        if el.get("character") == char_name and el["type"] == "parenthetical" and pc < 3:
+            pw.update(el["text"].lower().split()); pc += 1
+    all_w = words | pw
+    ms = sum(1 for w in all_w if w in GENDER_MALE)
+    fs = sum(1 for w in all_w if w in GENDER_FEMALE)
+    gender = "male" if ms > fs else ("female" if fs > ms else None)
+    age    = next((ag for ag, kws in AGE_KEYWORDS.items() if any(w in all_w for w in kws)), None)
+    accent = next((ac for ac, kws in ACCENT_KEYWORDS.items() if any(w in all_w for w in kws)), None)
+    traits = [t for t, kws in TRAIT_KEYWORDS.items() if any(w in all_w for w in kws)]
+    return {"gender": gender, "age": age, "accent": accent, "traits": traits}
+
+def score_voice(v, p):
+    s = 0
+    if p.get("gender") and v["gender"] == p["gender"]: s += 10
+    if p.get("age")    and v["age"]    == p["age"]:    s += 5
+    if p.get("accent") and v["accent"] == p["accent"]: s += 5
+    elif not p.get("accent") and v["accent"] == "british": s += 3
+    for t in p.get("traits", []):
+        if t in v["traits"]: s += 3
+    return s
+
+def auto_cast(characters, elements):
+    counts = {}
+    for el in elements:
+        if el.get("character"): counts[el["character"]] = counts.get(el["character"],0)+1
+    used = set(); casting = {}
+    for char in sorted(characters, key=lambda c: counts.get(c,0), reverse=True):
+        profile   = scrape_character_profile(char, elements)
+        available = [v for v in VOICE_LIBRARY if v["id"] not in used] or VOICE_LIBRARY
+        best      = max(available, key=lambda v: score_voice(v, profile))
+        casting[char] = {"voice_id": best["id"], "gender": best["gender"],
+                         "accent": best["accent"], "age": best["age"], "profile": profile}
+        used.add(best["id"])
+    return casting
+
+
+# ---------------------------------------------------------------------------
+# Sentiment / TTS
+# ---------------------------------------------------------------------------
+SENTIMENT_PARAMS = {
+    "whisper":{"rate":"-20%","volume":"-30%","pitch":"-5Hz"},
+    "shout":  {"rate":"+10%","volume":"+20%","pitch":"+10Hz"},
+    "angry":  {"rate":"+10%","volume":"+10%","pitch":"+5Hz"},
+    "sad":    {"rate":"-10%","volume":"-10%","pitch":"-10Hz"},
+    "excited":{"rate":"+15%","volume":"+10%","pitch":"+8Hz"},
+    "scared": {"rate":"+10%","volume":"-5%", "pitch":"+5Hz"},
+    "calm":   {"rate":"-5%", "volume":"0%",  "pitch":"-5Hz"},
+}
+SENTIMENT_KEYWORDS = {
+    "whisper":{"whisper","sotto voce","quietly","hushed"},
+    "shout":  {"shout","yell","scream","bellowing"},
+    "angry":  {"angry","furious","rage","irate","livid"},
+    "sad":    {"sad","crying","sobbing","weeping","tearful"},
+    "excited":{"excited","enthusiasm","eager","thrilled"},
+    "scared": {"scared","frightened","terrified","trembling"},
+    "calm":   {"calm","soothing","gentle","peaceful"},
 }
 
-// ── Playback screen ───────────────────────────────────────────────────────
-function goPlayback() {
-  buildScriptDisplay();
-  buildDojoPanel();
-  buildSceneDropdown();
-  goScreen("playback-screen");
-  stepDone(2);
-  renderPage(1);
-  preloadAhead(0);
-}
+def detect_sentiment(text):
+    words = set(text.lower().split())
+    for s, kws in SENTIMENT_KEYWORDS.items():
+        if words & kws: return SENTIMENT_PARAMS[s]
+    return {}
 
-function buildScriptDisplay() {
-  const display = document.getElementById("script-display");
-  display.innerHTML = "";
+def cache_key(text, voice_id):
+    return hashlib.sha256(f"{text}|{voice_id}|edge-tts".encode()).hexdigest()
 
-  elements.forEach((el, i) => {
-    const div = document.createElement("div");
-    div.className = `el el-${el.type}`;
-    div.dataset.idx = i;
-    // Render each element type correctly
-    if (el.type === 'scene_heading') {
-      // Parse "1 EXT. BOAT. DAY. 1" into: left-num, heading text, right-num
-      const raw = el.text || '';
-      const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
-      if (m) {
-        div.innerHTML =
-          `<span class="scene-num-left">${m[1]}</span>` +
-          `<span class="scene-heading-text">${m[2]}</span>` +
-          `<span class="scene-num-right">${m[3]}</span>`;
-      } else {
-        // No numbers (e.g. un-numbered scenes)
-        div.innerHTML = `<span class="scene-heading-text">${raw}</span>`;
-      }
-    } else if (el.type === 'action') {
-      div.textContent = el.text || '';
-    } else if (el.type === 'dialogue') {
-      div.textContent = el.text || '';
-    } else {
-      // character, parenthetical, transition — use display_text (preserves CONT'D etc.)
-      div.textContent = el.display_text || el.text || '';
-    }
-    div.onclick = () => jumpToIndex(i);
-    display.appendChild(div);
-  });
-}
+def get_cached(text, voice_id):
+    p = CACHE_DIR / f"{cache_key(text, voice_id)}.mp3"
+    return p.read_bytes() if p.exists() else None
 
-function buildDojoPanel() {
-  const panel = document.getElementById("dojo-chars");
-  panel.innerHTML = "";
-  const lineCounts = {};
-  elements.forEach(e => { if (e.character) lineCounts[e.character] = (lineCounts[e.character]||0)+1; });
+def save_cache(text, voice_id, audio_bytes):
+    (CACHE_DIR / f"{cache_key(text, voice_id)}.mp3").write_bytes(audio_bytes)
 
-  characters.slice().sort((a,b) => (lineCounts[b]||0)-(lineCounts[a]||0)).forEach(char => {
-    const row = document.createElement("div");
-    row.className = "dojo-char-row";
-    row.innerHTML = `
-      <span class="dojo-char-name">${char}</span>
-      <div class="toggle-switch active" id="toggle-${char.replace(/\s/g,'_')}" onclick="toggleMute('${char}')"></div>`;
-    panel.appendChild(row);
-  });
-}
+async def synthesise_async(text, voice_id, rate, volume, pitch):
+    communicate = edge_tts.Communicate(text, voice_id, rate=rate, volume=volume, pitch=pitch)
+    chunks = []
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio": chunks.append(chunk["data"])
+    return b"".join(chunks)
 
-function toggleMute(char) {
-  const id = `toggle-${char.replace(/\s/g,'_')}`;
-  const el = document.getElementById(id);
-  if (mutedChars.has(char)) {
-    mutedChars.delete(char);
-    el.classList.add("active");
-  } else {
-    mutedChars.add(char);
-    el.classList.remove("active");
-  }
-}
+def synthesise(text, voice_id, sentiment_params=None):
+    cached = get_cached(text, voice_id)
+    if cached: return cached
+    p = sentiment_params or {}
+    loop = asyncio.new_event_loop()
+    try:
+        audio = loop.run_until_complete(synthesise_async(
+            expand_abbrevs(text), voice_id,
+            p.get("rate","+0%"), p.get("volume","+0%"), p.get("pitch","+0Hz")))
+    finally:
+        loop.close()
+    save_cache(text, voice_id, audio)
+    return audio
 
-function buildSceneDropdown() {
-  const sel = document.getElementById("scene-select");
-  sel.innerHTML = '<option value="">Jump to scene…</option>';
-  elements.forEach((el, i) => {
-    if (el.type === "scene_heading") {
-      const opt = document.createElement("option");
-      opt.value = i;
-      opt.textContent = el.text.substring(0, 50);
-      sel.appendChild(opt);
-    }
-  });
-}
 
-function jumpToScene(idx) {
-  if (idx === "") return;
-  jumpToIndex(parseInt(idx));
-}
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"})
 
-// ── Page rendering ────────────────────────────────────────────────────────
-function renderPage(page) {
-  currentPage = page;
-  document.getElementById("page-label").textContent = `Page ${page}`;
+@app.route("/")
+def index():
+    return render_template("index.html")
 
-  const allEls = document.querySelectorAll(".el");
-  allEls.forEach(e => e.style.display = "none");
+@app.route("/upload", methods=["POST"])
+def upload():
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+    f   = request.files["file"]
+    ext = (f.filename or "").rsplit(".", 1)[-1].lower()
+    tmp = f"/tmp/scriptcast_upload.{ext}"
+    f.save(tmp)
+    try:
+        if ext == "pdf":   elements, page_headers = parse_pdf(tmp)
+        elif ext == "fdx": elements, page_headers = parse_fdx(tmp)
+        else: return jsonify({"error": "Unsupported file type. Use .pdf or .fdx"}), 400
+    except Exception as e:
+        return jsonify({"error": f"Parse error: {str(e)}"}), 500
 
-  const indices = pageMap[String(page)] || [];
-  if (indices.length === 0) return;
+    characters = list({e["character"] for e in elements if e.get("character")})
+    casting    = auto_cast(characters, elements)
+    page_map   = {}
+    for i, el in enumerate(elements):
+        page_map.setdefault(str(el.get("page", 1)), []).append(i)
 
-  indices.forEach(i => {
-    const el = document.querySelector(`.el[data-idx="${i}"]`);
-    if (el) el.style.display = "";
-  });
+    return jsonify({"elements": elements, "casting": casting,
+                    "page_map": page_map, "page_headers": page_headers,
+                    "characters": characters})
 
-  // Page header
-  const display = document.getElementById("script-display");
-  let header = display.querySelector(".page-header-bar");
-  if (!header) {
-    header = document.createElement("div");
-    header.className = "page-header-bar";
-    display.prepend(header);
-  }
-  const ph = pageHeaders[page] || pageHeaders[String(page)];
-  if (ph) {
-    const parts = ph.split(/\s{2,}/);
-    header.innerHTML = `<span>${parts[0]||""}</span><span>${parts[1]||page+"."}</span>`;
-  } else {
-    header.innerHTML = `<span></span><span>${page}.</span>`;
-  }
+@app.route("/tts", methods=["POST"])
+def tts():
+    data  = request.get_json()
+    text  = data.get("text", "").strip()
+    voice = data.get("voice_id", "en-GB-RyanNeural")
+    paren = data.get("parenthetical", "")
+    if not text: return jsonify({"error": "No text provided"}), 400
+    try:
+        audio = synthesise(text, voice, detect_sentiment(paren) if paren else {})
+    except Exception as e:
+        return jsonify({"error": f"TTS error: {str(e)}"}), 500
+    import base64
+    return jsonify({"audio": base64.b64encode(audio).decode(), "format": "mp3"})
 
-  // Scroll to first visible element
-  const firstEl = document.querySelector(`.el[data-idx="${indices[0]}"]`);
-  if (firstEl) firstEl.scrollIntoView({ behavior: "smooth", block: "start" });
-}
+@app.route("/voices", methods=["GET"])
+def voices():
+    return jsonify({"voices": VOICE_LIBRARY})
 
-function prevPage() {
-  const pages = Object.keys(pageMap).map(Number);
-  const min = Math.min(...pages);
-  if (currentPage > min) renderPage(currentPage - 1);
-}
-
-function nextPage() {
-  const pages = Object.keys(pageMap).map(Number);
-  const max = Math.max(...pages);
-  if (currentPage < max) renderPage(currentPage + 1);
-}
-
-// ── Playback engine ───────────────────────────────────────────────────────
-function togglePlay() {
-  playing ? pause() : play();
-}
-
-function play() {
-  playing = true;
-  document.getElementById("play-btn").textContent = "⏸";
-  playNext();
-}
-
-function pause() {
-  playing = false;
-  document.getElementById("play-btn").textContent = "▶";
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-}
-
-async function playNext() {
-  if (!playing) return;
-
-  // Find next playable element
-  while (currentIdx < elements.length) {
-    const el = elements[currentIdx];
-    if (el.type === "dialogue" || el.type === "action") break;
-    if (el.type === "scene_heading") break;
-    currentIdx++;
-  }
-
-  if (currentIdx >= elements.length) {
-    pause();
-    showToast("End of screenplay");
-    return;
-  }
-
-  const el = elements[currentIdx];
-  highlightElement(currentIdx);
-  updateNowPlaying(el);
-  ensurePageVisible(currentIdx);
-  preloadAhead(currentIdx);
-
-  // Check if character is muted
-  if (el.character && mutedChars.has(el.character)) {
-    // Silence gap so actor can speak
-    await sleep(1200 / playSpeed);
-    currentIdx++;
-    playNext();
-    return;
-  }
-
-  // Non-dialogue scene headings — just advance after brief pause
-  if (el.type === "scene_heading") {
-    await sleep(600 / playSpeed);
-    currentIdx++;
-    playNext();
-    return;
-  }
-
-  // Get audio
-  try {
-    const audioData = await getAudio(currentIdx, el);
-    if (!playing) return;
-    await playAudio(audioData);
-    if (!playing) return;
-    currentIdx++;
-    playNext();
-  } catch(e) {
-    console.error("TTS error:", e);
-    currentIdx++;
-    playNext();
-  }
-}
-
-async function getAudio(idx, el) {
-  if (audioQueue[idx]) return audioQueue[idx];
-
-  const voiceId = (el.character && casting[el.character])
-    ? casting[el.character].voice_id
-    : "en-GB-RyanNeural";
-
-  // Find preceding parenthetical for sentiment
-  let parenthetical = "";
-  if (idx > 0 && elements[idx-1]?.type === "parenthetical") {
-    parenthetical = elements[idx-1].text;
-  }
-
-  const resp = await fetch("/tts", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: el.text, voice_id: voiceId, parenthetical })
-  });
-  const data = await resp.json();
-  if (data.error) throw new Error(data.error);
-
-  const binary = atob(data.audio);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  audioQueue[idx] = bytes.buffer;
-  return audioQueue[idx];
-}
-
-function preloadAhead(fromIdx) {
-  for (let i = fromIdx; i < Math.min(fromIdx + 3, elements.length); i++) {
-    const el = elements[i];
-    if ((el.type === "dialogue" || el.type === "action") && !audioQueue[i] && el.character && !mutedChars.has(el.character)) {
-      getAudio(i, el).catch(() => {});
-    }
-  }
-}
-
-function playAudio(arrayBuffer) {
-  return new Promise((resolve, reject) => {
-    const blob = new Blob([arrayBuffer], { type: "audio/mpeg" });
-    const url  = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    audio.playbackRate = playSpeed;
-    audio.preservesPitch = true;
-    currentAudio = audio;
-    audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-    audio.onerror = reject;
-    audio.play().catch(reject);
-  });
-}
-
-function skipForward() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  currentIdx = Math.min(currentIdx + 1, elements.length - 1);
-  if (playing) { playNext(); } else { highlightElement(currentIdx); updateNowPlaying(elements[currentIdx]); }
-}
-
-function skipBack() {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  currentIdx = Math.max(currentIdx - 1, 0);
-  if (playing) { playNext(); } else { highlightElement(currentIdx); updateNowPlaying(elements[currentIdx]); }
-}
-
-function jumpToIndex(idx) {
-  if (currentAudio) { currentAudio.pause(); currentAudio = null; }
-  currentIdx = idx;
-  if (playing) playNext();
-  else { highlightElement(idx); updateNowPlaying(elements[idx]); }
-}
-
-function setSpeed(s, btn) {
-  playSpeed = s;
-  if (currentAudio) currentAudio.playbackRate = s;
-  document.querySelectorAll(".speed-pill").forEach(p => p.classList.remove("active"));
-  btn.classList.add("active");
-}
-
-// ── UI helpers ────────────────────────────────────────────────────────────
-function highlightElement(idx) {
-  document.querySelectorAll(".el.playing").forEach(e => e.classList.remove("playing"));
-  const el = document.querySelector(`.el[data-idx="${idx}"]`);
-  if (el) {
-    el.classList.add("playing");
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-}
-
-function updateNowPlaying(el) {
-  if (!el) return;
-  document.getElementById("np-char").textContent = el.character || (el.type === "scene_heading" ? "SCENE" : "NARRATION");
-  document.getElementById("np-text").textContent = el.text?.substring(0, 120) || "";
-}
-
-function ensurePageVisible(idx) {
-  const el = elements[idx];
-  if (!el) return;
-  const page = el.page || 1;
-  if (page !== currentPage) renderPage(page);
-}
-
-function searchScript(query) {
-  document.querySelectorAll(".highlight").forEach(e => {
-    e.outerHTML = e.textContent;
-  });
-  if (!query || query.length < 2) return;
-  const q = query.toLowerCase();
-  document.querySelectorAll(".el").forEach(el => {
-    const text = el.textContent;
-    if (text.toLowerCase().includes(q)) {
-      el.innerHTML = text.replace(new RegExp(`(${query})`, "gi"), '<span class="highlight">$1</span>');
-    }
-  });
-}
-
-// ── Navigation helpers ────────────────────────────────────────────────────
-function goUpload() {
-  pause();
-  elements = []; casting = {}; pageMap = {}; characters = [];
-  document.getElementById("file-input").value = "";
-  goScreen("screen-upload");
-  [1,2,3].forEach(n => {
-    document.getElementById(`dot-${n}`).className = "step-dot" + (n===1?" active":"");
-  });
-}
-
-function goScreen(id) {
-  document.querySelectorAll(".screen, .loading-screen, #playback-screen").forEach(s => {
-    s.classList.remove("active");
-    if (s.id !== "playback-screen") s.style.display = "";
-  });
-  const target = document.getElementById(id);
-  target.classList.add("active");
-}
-
-function showLoading(msg) {
-  document.getElementById("loading-msg").textContent = msg;
-  goScreen("loading-screen");
-}
-function hideLoading() {
-  document.getElementById("loading-screen").classList.remove("active");
-}
-
-function stepDone(n) {
-  document.getElementById(`dot-${n}`).className = "step-dot done";
-  if (n < 3) document.getElementById(`dot-${n+1}`).className = "step-dot active";
-}
-
-function showToast(msg) {
-  const t = document.getElementById("toast");
-  t.textContent = msg;
-  t.style.display = "block";
-  setTimeout(() => t.style.display = "none", 3500);
-}
-
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-</script>
-</body>
-</html>
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host="0.0.0.0", port=port, debug=False)
