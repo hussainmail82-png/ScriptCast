@@ -760,9 +760,9 @@ function buildScriptDisplay() {
     if (el.type === 'character') {
       div.innerHTML = el.display_text || el.text;
     } else {
-      const safe = (el.display_text || el.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      div.innerHTML = safe.replace(/
-/g,'<br>');
+      const raw = (el.display_text || el.text) || '';
+      const safe = raw.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      div.innerHTML = safe.replace(/\n/g,'<br>');
     }
     div.onclick = () => jumpToIndex(i);
     display.appendChild(div);
