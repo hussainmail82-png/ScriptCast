@@ -226,13 +226,17 @@
 
   /* Screenplay page */
   .page-container {
-    background: #fffef8;
-    border: none;
-    border-radius: 0;
-    overflow: auto;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
     padding: 0;
     display: block;
     min-width: 0;
+  }
+
+  #script-display {
+    margin: 0 14px;
   }
 
   .page-toolbar {
@@ -323,14 +327,14 @@
     line-height: 1.5;
     position: relative;
     margin-left: 144px;
-    margin-right: 200px;
+    margin-right: 144px;
   }
   /* scene numbers use inline style — see JS render */
 
   /* ACTION: starts at 108pt = 144px from page left */
   .el-action {
     margin-left: 144px;
-    margin-right: 200px;
+    margin-right: 144px;
     margin-top: 1em;
     margin-bottom: 0;
     display: block;
