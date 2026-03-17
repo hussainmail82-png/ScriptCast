@@ -226,15 +226,12 @@
 
   /* Screenplay page */
   .page-container {
-    background: #888784;
+    background: #fffef8;
     border: none;
-    border-radius: 4px;
+    border-radius: 0;
     overflow: auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0;
+    padding: 0;
+    display: block;
     min-width: 0;
   }
 
@@ -325,15 +322,15 @@
     display: block;
     line-height: 1.5;
     position: relative;
-    margin-left: 18.16%;
-    margin-right: 25.22%;
+    margin-left: 144px;
+    margin-right: 200px;
   }
   /* scene numbers use inline style — see JS render */
 
   /* ACTION: starts at 108pt = 144px from page left */
   .el-action {
-    margin-left: 18.16%;
-    margin-right: 25.22%;
+    margin-left: 144px;
+    margin-right: 200px;
     margin-top: 1em;
     margin-bottom: 0;
     display: block;
@@ -353,7 +350,7 @@
   /* DIALOGUE: 180pt = 240px from page left, right ~487pt = 649px */
   .el-dialogue {
     margin-left: 30.26%;
-    margin-right: 18.16%;
+    margin-right: 144px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
@@ -362,8 +359,8 @@
 
   /* PARENTHETICAL: between dialogue and character */
   .el-parenthetical {
-    margin-left: 36.32%;
-    margin-right: 24.21%;
+    margin-left: 288px;
+    margin-right: 192px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
@@ -372,7 +369,7 @@
   }
 
   .el-transition {
-    margin-right: 9.08%;
+    margin-right: 72px;
     text-align: right;
     margin-top: 1em;
     display: block;
@@ -666,7 +663,7 @@
             <option value="">Jump to scene…</option>
           </select>
         </div>
-        <div class="page-wrapper"><div id="script-display"></div></div>
+        <div id="script-display"></div>
       </div>
 
       <!-- Right panel -->
@@ -848,7 +845,7 @@ function buildScriptDisplay() {
       // Left number sits at 72px from page left (in the margin, before body text at 144px)
       // Right number sits at 698px from page left (= 523pt × 1.333)
       // .el-scene_heading has margin-left:144px, so:
-      //   left number offset from element = 72-144 = -72px (use absolute left:-9.08%)
+      //   left number offset from element = 72-144 = -72px (use absolute left:-72px)
       //   right number: page 698px - 144px margin-left - element width... use absolute right
       //   Right body edge ≈ 793-72=721px. Element right edge = 793-72=721px
       //   Right number at 698px from page = 698-144=554px from element left
@@ -856,7 +853,7 @@ function buildScriptDisplay() {
       const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
       if (m) {
         div.innerHTML =
-          '<span style="position:absolute;left:-9.08%">' + m[1] + '</span>' +
+          '<span style="position:absolute;left:-72px">' + m[1] + '</span>' +
           '<span>' + m[2] + '</span>' +
           '<span style="position:absolute;right:0">' + m[3] + '</span>';
       } else {
