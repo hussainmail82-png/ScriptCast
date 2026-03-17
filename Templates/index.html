@@ -757,11 +757,14 @@ function buildScriptDisplay() {
     const div = document.createElement("div");
     div.className = `el el-${el.type}`;
     div.dataset.idx = i;
-if (el.type === 'character') {
-    div.innerHTML = el.display_text || el.text;
-} else {
-    div.innerHTML = (el.display_text || el.text).replace(/\n/g, '<br>');
-}    div.onclick = () => jumpToIndex(i);
+    if (el.type === 'character') {
+      div.innerHTML = el.display_text || el.text;
+    } else {
+      const safe = (el.display_text || el.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      div.innerHTML = safe.replace(/
+/g,'<br>');
+    }
+    div.onclick = () => jumpToIndex(i);
     display.appendChild(div);
   });
 }
