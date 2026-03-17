@@ -66,7 +66,7 @@ CHARACTER_CUE = re.compile(
 )
 PARENTHETICAL_PAT = re.compile(r"^\s*\((.+)\)\s*$")
 PAGE_NUMBER_PAT = re.compile(r"^\d+\.?$")
-CONTINUED_PAT = re.compile(r"^\s*\(?(CONTINUED|CONT'D)\)?:?\s*$", re.IGNORECASE)
+NON_CHARACTER_PAT = re.compile(r"^\s*(WRITTEN BY|DIRECTED BY|PRODUCED BY|FADE IN|THE END|TITLE CARD|SUPER|SMASH CUT)\s*$", re.IGNORECASE)
 PAGE_HEADER_PAT = re.compile(r"^\s*\d+\s*(CONTINUED|CONT'D)", re.IGNORECASE)
 REVISION_HEADER = re.compile(
     r"(Blue|Pink|Yellow|Green|Goldenrod|Buff|Salmon|Cherry|White)\s+Rev\.", re.IGNORECASE
@@ -168,8 +168,9 @@ def parse_lines(page_lines):
 
         # 3. Character cue — ALL CAPS, no lowercase
         if (CHARACTER_CUE.match(stripped) and
-                not any(c.islower() for c in stripped) and
-                stripped.upper() == stripped.upper()):
+            not any(c.islower() for c in stripped) and
+            stripped.upper() == stripped.upper() and
+            not NON_CHARACTER_PAT.match(stripped)):
             # Adjacency test: next non-blank line must be dialogue/parenthetical
             next_content = next(
                 (page_lines[j][1].strip() for j in range(i+1, min(i+4, len(page_lines)))
