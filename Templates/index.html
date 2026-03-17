@@ -226,10 +226,11 @@
 
   /* Screenplay page */
   .page-container {
-    background: var(--bg2);
+    background: #2a2a2a;
     border: 1px solid var(--border);
     border-radius: 12px;
-    overflow: hidden;
+    overflow: auto;
+    padding: 24px;
   }
 
   .page-toolbar {
@@ -253,61 +254,97 @@
     width: 180px;
   }
 
-  #script-display {
+  /* A4 page: 210mm wide. At 96dpi: 794px wide.
+     Screenplay margins (A4 standard):
+       top/bottom: 25mm (~94px)
+       left: 38mm (~144px) — wider for binding
+       right: 25mm (~94px)
+     Printable width: 210 - 38 - 25 = 147mm (~556px)
+  */
+  .page-wrapper {
     background: var(--page-bg);
-    min-height: 600px;
-    padding: 48px;
-    font-family: var(--font-script);
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--page-text);
-    position: relative;
+    width: 794px;
+    min-height: 1123px; /* A4 height at 96dpi */
+    margin: 0 auto;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.15);
   }
 
-  /* Screenplay element styles — Final Draft standard */
-  .el { padding: 0; cursor: pointer; border-radius: 2px; transition: background .15s; display: block; }
+  #script-display {
+    background: var(--page-bg);
+    width: 794px;
+    min-height: 1123px;
+    padding: 94px 94px 94px 144px;
+    box-sizing: border-box;
+    font-family: var(--font-script);
+    font-size: 12pt;
+    line-height: 1.0;
+    color: var(--page-text);
+    position: relative;
+    margin: 0 auto;
+  }
+
+  /* Screenplay element styles — Final Draft A4 standard
+     Printable width = 556px (147mm)
+     Character: indent ~206px from left margin (37% of 556)
+     Dialogue:  indent ~89px left, ~139px right of printable area
+     Parenthetical: indent ~150px left, ~184px right
+  */
+  .el {
+    padding: 0;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: background .15s;
+    display: block;
+    line-height: 1.5;
+  }
   .el:hover { background: rgba(232,184,75,.12); }
   .el.playing { background: rgba(232,184,75,.25); }
 
   .el-scene_heading {
     text-transform: uppercase;
     font-weight: bold;
-    margin: 1em 0 0;
-    letter-spacing: .5px;
+    margin: 1.5em 0 0.5em;
+    letter-spacing: .3px;
     display: block;
   }
   .el-character {
-    margin-left: 37%;
+    margin-left: 206px;
     text-transform: uppercase;
-    font-weight: bold;
+    font-weight: normal;
     margin-top: 1em;
     margin-bottom: 0;
     display: block;
   }
   .el-dialogue {
-    margin-left: 17%;
-    margin-right: 25%;
+    margin-left: 89px;
+    margin-right: 100px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
     white-space: pre-wrap;
   }
   .el-parenthetical {
-    margin-left: 27%;
-    margin-right: 33%;
-    font-style: italic;
-    color: #444;
+    margin-left: 150px;
+    margin-right: 150px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
+    white-space: pre-wrap;
   }
   .el-action {
     margin: 0;
     margin-top: 1em;
+    margin-bottom: 0;
     display: block;
     white-space: pre-wrap;
+    line-height: 1.5;
   }
-  .el-transition { text-align: right; margin: 1em 0; text-transform: uppercase; display: block; }
+  .el-transition {
+    text-align: right;
+    margin: 1em 0;
+    text-transform: uppercase;
+    display: block;
+  }
 
   .page-header-bar {
     display: flex;
@@ -596,7 +633,7 @@
             <option value="">Jump to scene…</option>
           </select>
         </div>
-        <div id="script-display"></div>
+        <div class="page-wrapper"><div id="script-display"></div></div>
       </div>
 
       <!-- Right panel -->
