@@ -299,7 +299,7 @@
   .el-scene_heading {
     text-transform: uppercase;
     font-weight: bold;
-    margin: 1.5em 0 0.5em;
+    margin: 1.2em 0 0.3em;
     letter-spacing: .3px;
     display: block;
   }
@@ -307,7 +307,7 @@
     margin-left: 35%;
     text-transform: uppercase;
     font-weight: normal;
-    margin-top: 1em;
+    margin-top: 0.8em;
     margin-bottom: 0;
     display: block;
   }
@@ -330,10 +330,10 @@
   }
   .el-action {
     margin: 0;
-    margin-top: 1em;
+    margin-top: 0.8em;
     margin-bottom: 0;
     display: block;
-    line-height: 1.5;
+    line-height: 1.4;
   }
   .el-transition {
     text-align: right;
@@ -805,11 +805,17 @@ function buildScriptDisplay() {
     const div = document.createElement("div");
     div.className = `el el-${el.type}`;
     div.dataset.idx = i;
-    // Action/dialogue: use text (full joined paragraph) so it reflows naturally
-    // Character: use display_text to preserve (CONT'D) etc.
-    if (el.type === 'action' || el.type === 'dialogue') {
+    // Render each element type correctly
+    if (el.type === 'scene_heading') {
+      // Scene headings: number on left, number on right (e.g. "1 EXT. BOAT. DAY. 1")
+      // The text already contains this from the PDF — just display it
+      div.textContent = el.text || '';
+    } else if (el.type === 'action') {
+      div.textContent = el.text || '';
+    } else if (el.type === 'dialogue') {
       div.textContent = el.text || '';
     } else {
+      // character, parenthetical, transition — use display_text (preserves CONT'D etc.)
       div.textContent = el.display_text || el.text || '';
     }
     div.onclick = () => jumpToIndex(i);
