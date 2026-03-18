@@ -831,10 +831,14 @@ function goPlayback() {
   buildSceneDropdown();
   goScreen("playback-screen");
   stepDone(2);
-  // Start on first page that has content
+  // Start on first page that has script content (scene headings/dialogue)
+  // Title page (page 1) stays navigable but playback starts at page 2
   const pages = Object.keys(pageMap).map(Number).sort((a,b) => a-b);
-  const firstPage = pages.find(p => (pageMap[String(p)] || []).length > 0) || 1;
-  renderPage(firstPage);
+  const firstScriptPage = pages.find(p => {
+    const idxs = pageMap[String(p)] || [];
+    return idxs.some(i => elements[i] && elements[i].type === 'scene_heading');
+  }) || pages[0] || 1;
+  renderPage(firstScriptPage);
   preloadAhead(0);
 }
 
