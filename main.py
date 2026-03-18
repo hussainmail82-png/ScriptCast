@@ -15,23 +15,45 @@ app = Flask(__name__, template_folder=os.path.join(BASE_DIR, 'Templates'))
 CACHE_DIR = Path(os.path.join(BASE_DIR, 'audio_cache'))
 CACHE_DIR.mkdir(exist_ok=True)
 
+# ---------------------------------------------------------------------------
+# Spec constants (from FDX ElementSettings, US Letter, Courier 12pt)
+# Page: 8.5" wide. 1pt = 1/72". 1char = 0.1" in Courier 12pt.
+# Indents measured from LEFT PAGE EDGE in inches.
+# ---------------------------------------------------------------------------
+ELEMENT_INDENTS = {
+    # (left_inch, right_inch)  right = right boundary from left edge
+    'scene_heading': (1.50, 7.50),  # 60 chars
+    'action':        (1.50, 7.50),  # 60 chars
+    'character':     (3.50, 7.25),  # 37 chars
+    'parenthetical': (3.00, 5.50),  # 25 chars
+    'dialogue':      (2.50, 6.00),  # 35 chars
+    'transition':    (5.50, 7.10),  # 16 chars, right-aligned
+    'shot':          (1.50, 7.50),  # same as action
+}
+PAGE_WIDTH_INCH = 8.5
+
+# ---------------------------------------------------------------------------
+# Unicode normalisation
+# ---------------------------------------------------------------------------
 UNICODE_MAP = {
     "\u2018": "'", "\u2019": "'",
     "\u201c": '"', "\u201d": '"',
     "\u2026": "...", "\u2013": "-", "\u2014": "--",
 }
 
-def normalise(text):
+def normalise_unicode(text):
     for src, dst in UNICODE_MAP.items():
         text = text.replace(src, dst)
     return text
 
+# ---------------------------------------------------------------------------
+# TTS abbreviation expansion
+# ---------------------------------------------------------------------------
 ABBREV = {
     r"\bMR\.": "Mister", r"\bMRS\.": "Missus", r"\bDR\.": "Doctor",
     r"\bINT\.": "Interior", r"\bEXT\.": "Exterior",
     r"\bV\.O\.": "Voice Over", r"\bO\.S\.": "Off Screen",
     r"\bO\.C\.": "Off Camera", r"\bSGT\.": "Sergeant",
-    r"\bCONT'D\b": "Continued",
     r"\.\.\.": " (pause) ", r"--": " (pause) ",
 }
 
@@ -40,192 +62,415 @@ def expand_abbrevs(text):
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     return text
 
-SCENE_HEADING = re.compile(
-    r"^\s*(?:(\d+[A-Z]?)\s+)?(?:[A-Z]+\.\s*)?(INT\.?|EXT\.?|INT\.?/EXT\.?|I/E\.?|EST\.?)\s*-?\s*(.+?)(?:\s+(\d+[A-Z]?))?\s*$",
-    re.IGNORECASE
-)
-SCENE_HEADING_NUMBERED = re.compile(
-    r"^\s*(\d+[A-Z]?)\s+(.+?)\s*-\s*(DAY|NIGHT|MORNING|EVENING|DAWN|DUSK|CONTINUOUS|LATER|MOMENTS LATER|SAME TIME|SAME)\s*(\d+[A-Z]?)?\s*$",
-    re.IGNORECASE
-)
-TRANSITION_PAT    = re.compile(r"^\s*([A-Z ]+TO:|FADE (?:IN|OUT)\.|FADE TO BLACK\.|SMASH CUT TO:|DISSOLVE TO:|CUT TO:)\s*$")
-CHARACTER_CUE     = re.compile(r"^\s*([A-Z0-9][A-Z0-9 .\'\-]*)\s*(?:\(([^)]+)\))?\s*$")
-PARENTHETICAL_PAT = re.compile(r"^\s*\((.+)\)\s*$")
-PAGE_NUMBER_PAT   = re.compile(r"^\d+\.?$")
-CONTINUED_PAT     = re.compile(r"^\s*\(?(?:CONTINUED|CONT'D)\)?:?\s*$", re.IGNORECASE)
-PAGE_HEADER_PAT   = re.compile(r"^\s*\d+\s*(?:CONTINUED|CONT'D)", re.IGNORECASE)
-REVISION_HEADER   = re.compile(r"(?:Blue|Pink|Yellow|Green|Goldenrod|Buff|Salmon|Cherry|White)\s+Rev\.", re.IGNORECASE)
-NON_CHARACTER_PAT = re.compile(
-    r"^\s*(?:WRITTEN BY|DIRECTED BY|PRODUCED BY|FADE IN\.?|FADE OUT\.?|THE END|TITLE CARD|SUPER|SMASH CUT|CUT TO|DISSOLVE TO|BLACK)\s*$",
-    re.IGNORECASE
-)
-CHAR_EXTENSION = re.compile(r"\s*\([^)]*\)\s*")
+# ---------------------------------------------------------------------------
+# Character ID normalisation (Spec §6.2)
+# Handles: "JiM:", "GrACE:", "Jim", "GRACE (CONT'D)" → "JIM", "GRACE"
+# ---------------------------------------------------------------------------
+QUALIFIER_PAT = re.compile(r"\s*\([^)]*\)\s*$")
+STRIP_COLON   = re.compile(r":+$")
+STRIP_ENDS    = re.compile(r"^[^A-Z0-9']+|[^A-Z0-9']+$")
+SLUGIFY       = re.compile(r"[\s\-]+")
 
-def strip_extension(name):
-    return CHAR_EXTENSION.sub("", name).strip()
+def normalise_character_id(raw):
+    s = raw.strip().upper()
+    s = STRIP_COLON.sub("", s)
+    s = QUALIFIER_PAT.sub("", s).strip()
+    s = re.sub(r"\s+", " ", s)
+    s = STRIP_ENDS.sub("", s)
+    s = SLUGIFY.sub("_", s)
+    return s
 
-def is_skip_line(s):
-    return bool(PAGE_NUMBER_PAT.match(s) or CONTINUED_PAT.match(s) or
-                PAGE_HEADER_PAT.match(s) or REVISION_HEADER.search(s))
+# Auto-inserted strings to strip from character/dialogue (Spec §10)
+AUTO_CONTINUEDS = re.compile(
+    r"\s*\((?:MORE|CONT'D|CONTINUED)\)\s*$", re.IGNORECASE
+)
 
 # ---------------------------------------------------------------------------
-# PDF Parser — line-by-line with paragraph grouping for display only
+# FDX Parser (Spec §11.1)
 # ---------------------------------------------------------------------------
+def parse_fdx(file_path):
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    # Read auto-insert strings to strip
+    more_str = "(MORE)"
+    contd_str = "(CONT'D)"
+    db = root.find(".//DialogueBreaks")
+    if db is not None:
+        more_str  = db.get("DialogueBottom", more_str)
+        contd_str = db.get("DialogueTop", contd_str)
+
+    elements = []
+    pending_char = None
+    pending_char_id = None
+
+    for para in root.findall("./Content/Paragraph"):
+        ptype = para.get("Type", "Action")
+
+        # Concatenate ALL <Text> children (Spec §3.2 multi-Text)
+        raw = "".join(t.text or "" for t in para.iter("Text")).strip()
+        raw = normalise_unicode(raw)
+        if not raw:
+            continue
+
+        # Strip auto-inserted continueds (Spec §10)
+        raw = AUTO_CONTINUEDS.sub("", raw).strip()
+        if not raw:
+            continue
+
+        if ptype == "Scene Heading":
+            text = raw.upper()  # Spec §11.3 — always uppercase
+            elements.append({
+                "type": "scene_heading",
+                "text": text,
+                "display_text": text,
+                "page": 1,
+            })
+            pending_char = None
+            pending_char_id = None
+
+        elif ptype == "Transition":
+            text = raw.upper()
+            elements.append({
+                "type": "transition",
+                "text": text,
+                "display_text": text,
+                "page": 1,
+            })
+            pending_char = None
+            pending_char_id = None
+
+        elif ptype == "Shot":
+            text = raw.upper()
+            elements.append({
+                "type": "shot",
+                "text": text,
+                "display_text": text,
+                "page": 1,
+            })
+
+        elif ptype == "Character":
+            # Normalise character ID (Spec §6.2)
+            char_id = normalise_character_id(raw)
+            display  = raw.upper()
+            pending_char    = display
+            pending_char_id = char_id
+            elements.append({
+                "type": "character",
+                "text": char_id,
+                "display_text": display,
+                "character": char_id,
+                "page": 1,
+            })
+
+        elif ptype == "Parenthetical":
+            text = raw if raw.startswith("(") else f"({raw})"
+            elements.append({
+                "type": "parenthetical",
+                "text": text,
+                "display_text": text,
+                "character": pending_char_id,
+                "page": 1,
+            })
+
+        elif ptype == "Dialogue":
+            # Strip trailing (MORE) / (CONT'D) from dialogue text
+            text = AUTO_CONTINUEDS.sub("", raw).strip()
+            elements.append({
+                "type": "dialogue",
+                "text": text,
+                "display_text": text,
+                "character": pending_char_id,
+                "page": 1,
+            })
+
+        else:  # Action, General, Cast List, etc.
+            elements.append({
+                "type": "action",
+                "text": raw,
+                "display_text": raw,
+                "page": 1,
+            })
+            pending_char    = None
+            pending_char_id = None
+
+    return elements, {}
+
+
+# ---------------------------------------------------------------------------
+# PDF Parser — uses measured x0 positions to classify elements
+# Spec §2.1: indents in inches from left page edge
+# At 72dpi equivalent: 1" = 72pt. pdfplumber returns pt coords.
+# ---------------------------------------------------------------------------
+
+# Spec §3.1 scene heading tokens
+SCENE_PREFIXES = re.compile(
+    r"^\s*(INT\.|EXT\.|INT\./EXT\.|EXT\./INT\.|I/E\.?|I/E\s)\s*",
+    re.IGNORECASE
+)
+SCENE_NUMBERED = re.compile(
+    r"^\s*(\d+[A-Z]?)\s+(INT\.|EXT\.|INT\./EXT\.|EXT\./INT\.|I/E)\s*",
+    re.IGNORECASE
+)
+
+# Spec §3.6 transitions
+TRANSITION_PAT = re.compile(
+    r"^\s*(CUT TO:|FADE OUT\.|FADE TO:|FADE TO BLACK\.|DISSOLVE TO:|"
+    r"SMASH CUT TO:|MATCH CUT TO:|JUMP CUT TO:|BACK TO:|FADE IN:)\s*$",
+    re.IGNORECASE
+)
+
+# Strings to strip from any line
+STRIP_PAT = re.compile(
+    r"^\s*\(?(CONTINUED|CONT'D|MORE)\)?:?\s*$", re.IGNORECASE
+)
+PAGE_NUM_PAT = re.compile(r"^\s*\d+\.?\s*$")
+
+# Spec §2.1 — indent thresholds in points (1" = 72pt)
+# US Letter 8.5" page. pdfplumber x0 is from left edge of page.
+THRESH = {
+    # If x0 < action_right (1.5" = 108pt) → action/scene heading territory
+    'action_left':       108,   # 1.50" × 72
+    # dialogue left = 2.50" = 180pt
+    'dialogue_left':     180,
+    # parenthetical left = 3.00" = 216pt
+    'parenthetical_left':216,
+    # character left = 3.50" = 252pt
+    'character_left':    252,
+    # transition left = 5.50" = 396pt
+    'transition_left':   396,
+}
+
+def classify_line(x0, text):
+    """Classify a line by its x0 indentation (in pt) and content."""
+    stripped = text.strip()
+    if not stripped:
+        return None, stripped
+
+    # Scene heading — starts with INT./EXT. etc regardless of indent
+    if SCENE_PREFIXES.match(stripped) or SCENE_NUMBERED.match(stripped):
+        return 'scene_heading', stripped.upper()
+
+    # Transition
+    if TRANSITION_PAT.match(stripped):
+        return 'transition', stripped.upper()
+
+    # Use x0 to classify by indent bucket
+    if x0 >= THRESH['transition_left']:
+        # Transition zone — check for ALL CAPS ending in colon/period
+        if stripped.isupper() or re.match(r'^[A-Z ]+[:.]\s*$', stripped):
+            return 'transition', stripped.upper()
+        return 'action', stripped  # fallback
+
+    if x0 >= THRESH['character_left']:
+        # Character zone — must be ALL CAPS (no lowercase)
+        if not any(c.islower() for c in stripped):
+            return 'character', stripped
+        return 'dialogue', stripped  # wrapped dialogue line
+
+    if x0 >= THRESH['parenthetical_left']:
+        if stripped.startswith('(') and stripped.endswith(')'):
+            return 'parenthetical', stripped
+        return 'dialogue', stripped
+
+    if x0 >= THRESH['dialogue_left']:
+        return 'dialogue', stripped
+
+    # Action / scene heading zone (x0 < 180pt)
+    return 'action', stripped
+
+
 def parse_pdf(file_path):
     elements = []
     page_headers = {}
 
     with pdfplumber.open(file_path) as pdf:
         for page_num, page in enumerate(pdf.pages, 1):
-            words = page.extract_words(extra_attrs=["fontname", "size"])
+            words = page.extract_words(extra_attrs=["size"])
             if not words:
                 continue
 
-            # Page header zone (y < 50)
+            # Page header zone: y < 50pt
             header_words = [w for w in words if float(w["top"]) < 50]
             if header_words:
-                hl = " ".join(w["text"] for w in sorted(header_words, key=lambda w: w["x0"]))
-                if len(hl) >= 8 and all(hl[i] == hl[i+1] for i in range(0, min(8, len(hl)-1), 2)):
+                hl = " ".join(w["text"] for w in
+                              sorted(header_words, key=lambda w: w["x0"]))
+                # Fix double-rendered headers
+                if (len(hl) >= 8 and
+                        all(hl[i] == hl[i+1]
+                            for i in range(0, min(8, len(hl)-1), 2))):
                     hl = hl[::2]
                 page_headers[page_num] = hl
 
-            # Group words into lines by y-coordinate (±3pt tolerance)
+            # Content words
             content_words = [w for w in words if float(w["top"]) >= 50]
+
+            # Group into lines by y (±3pt)
             lines_dict = {}
             for w in content_words:
                 y_key = round(float(w["top"]) / 3) * 3
                 lines_dict.setdefault(y_key, []).append(w)
 
-            sorted_ykeys = sorted(lines_dict.keys())
+            sorted_ys = sorted(lines_dict.keys())
 
-            # Estimate normal line height from most common gap
-            gaps = [sorted_ykeys[i+1] - sorted_ykeys[i] for i in range(len(sorted_ykeys)-1)]
+            # Estimate normal line spacing
+            gaps = [sorted_ys[i+1] - sorted_ys[i]
+                    for i in range(len(sorted_ys)-1)]
             gap_counts = Counter(round(g/2)*2 for g in gaps if 8 < g < 30)
             normal_lh = gap_counts.most_common(1)[0][0] if gap_counts else 14
-            para_threshold = normal_lh * 1.35
+            para_threshold = normal_lh * 1.4
 
-            # Build list of (page, text, x0, is_para_break_before)
+            # Build annotated line list: (text, x0, is_para_break)
             annotated = []
-            for idx, y_key in enumerate(sorted_ykeys):
-                line_words = sorted(lines_dict[y_key], key=lambda w: w["x0"])
-                text = normalise(" ".join(w["text"] for w in line_words))
-                x0 = float(line_words[0]["x0"])
-                para_break = (idx > 0 and (y_key - sorted_ykeys[idx-1]) > para_threshold)
+            for idx, y_key in enumerate(sorted_ys):
+                lw = sorted(lines_dict[y_key], key=lambda w: w["x0"])
+                text = normalise_unicode(
+                    " ".join(w["text"] for w in lw))
+                x0 = float(lw[0]["x0"])
+                para_break = (idx > 0 and
+                              (y_key - sorted_ys[idx-1]) > para_threshold)
                 annotated.append((page_num, text, x0, para_break))
 
-            elements.extend(parse_annotated_lines(annotated))
+            elements.extend(_classify_annotated(annotated))
 
     return elements, page_headers
 
 
-def parse_annotated_lines(lines):
+def _classify_annotated(lines):
     """
-    Parse lines with paragraph-break hints.
-    Key insight: classify line-by-line (for character detection etc.)
-    but group consecutive lines of the SAME paragraph into one element
-    for display so text reflows correctly.
+    Two-pass PDF classification:
+    Pass 1: classify each line individually
+    Pass 2: group consecutive lines of the same paragraph
     """
-    elements = []
-    state = "action"
-    pending_char = None
-
-    # First pass: classify each line
     classified = []
-    i = 0
-    while i < len(lines):
-        page_num, text, x0, para_break = lines[i]
+    pending_char_id = None
+    state = 'action'
+
+    for page_num, text, x0, para_break in lines:
         stripped = text.strip()
 
-        if is_skip_line(stripped):
-            i += 1
-            continue
-
+        # Skip page numbers and auto-continueds
         if not stripped:
-            if state == "action":
-                pending_char = None
-            i += 1
+            if state == 'action':
+                pending_char_id = None
+            continue
+        if PAGE_NUM_PAT.match(stripped):
+            continue
+        if STRIP_PAT.match(stripped):
             continue
 
-        # Scene heading
-        if SCENE_HEADING.match(stripped) or SCENE_HEADING_NUMBERED.match(stripped):
-            classified.append({"type": "scene_heading", "text": stripped.upper(),
-                               "page": page_num, "para_break": para_break})
-            state = "action"; pending_char = None; i += 1; continue
+        etype, norm_text = classify_line(x0, stripped)
+        if etype is None:
+            continue
 
-        # Transition
-        if TRANSITION_PAT.match(stripped):
-            classified.append({"type": "transition", "text": stripped,
-                               "page": page_num, "para_break": para_break})
-            state = "action"; pending_char = None; i += 1; continue
+        if etype == 'scene_heading':
+            pending_char_id = None
+            state = 'action'
+            classified.append({
+                "type": "scene_heading",
+                "text": norm_text,
+                "x0": x0,
+                "page": page_num,
+                "para_break": para_break,
+            })
 
-        # Character cue — must be ALL CAPS single line, not a non-character
-        has_lower = any(c.islower() for c in stripped)
-        if (CHARACTER_CUE.match(stripped) and not has_lower and
-                not NON_CHARACTER_PAT.match(stripped)):
-            # Peek ahead: next non-blank must be dialogue/paren
-            next_text = next((lines[j][1].strip() for j in range(i+1, min(i+5, len(lines)))
-                             if lines[j][1].strip()), "")
-            if (next_text and not SCENE_HEADING.match(next_text) and
-                    not TRANSITION_PAT.match(next_text) and
-                    not (CHARACTER_CUE.match(next_text) and not any(c.islower() for c in next_text))):
-                char_name = strip_extension(stripped)
-                if char_name:
-                    pending_char = char_name; state = "dialogue"
-                    classified.append({"type": "character", "text": char_name,
-                                       "display_text": stripped, "character": char_name,
-                                       "page": page_num, "para_break": para_break})
-                    i += 1; continue
+        elif etype == 'transition':
+            pending_char_id = None
+            state = 'action'
+            classified.append({
+                "type": "transition",
+                "text": norm_text,
+                "x0": x0,
+                "page": page_num,
+                "para_break": para_break,
+            })
 
-        # Parenthetical
-        if state == "dialogue" and PARENTHETICAL_PAT.match(stripped):
-            classified.append({"type": "parenthetical", "text": stripped,
-                               "character": pending_char, "page": page_num, "para_break": para_break})
-            i += 1; continue
+        elif etype == 'character':
+            char_id = normalise_character_id(norm_text)
+            pending_char_id = char_id
+            state = 'dialogue'
+            classified.append({
+                "type": "character",
+                "text": char_id,
+                "display_text": norm_text.upper(),
+                "character": char_id,
+                "x0": x0,
+                "page": page_num,
+                "para_break": para_break,
+            })
 
-        # Dialogue vs action-between-speeches:
-        # Dialogue is indented (x0 > action_threshold).
-        # Action lines between speeches have x0 near left margin.
-        # We use x0 > 100 as the threshold (dialogue is typically indented ~150pt+)
-        if state == "dialogue" and pending_char and x0 > 150:
-            classified.append({"type": "dialogue", "text": stripped,
-                               "character": pending_char, "page": page_num, "para_break": para_break})
-            i += 1; continue
+        elif etype == 'parenthetical':
+            classified.append({
+                "type": "parenthetical",
+                "text": norm_text,
+                "character": pending_char_id,
+                "x0": x0,
+                "page": page_num,
+                "para_break": para_break,
+            })
 
-        # Action (including action lines between dialogue speeches)
-        classified.append({"type": "action", "text": stripped,
-                           "page": page_num, "para_break": para_break})
-        # Don't reset pending_char for action between speeches — next speech still belongs to same char
-        # Only reset if there's a scene heading or explicit break
-        state = "action"; i += 1
+        elif etype == 'dialogue':
+            # Check x0 — if near action zone, it's inter-speech action
+            if state == 'dialogue' and pending_char_id and x0 > THRESH['dialogue_left'] - 20:
+                classified.append({
+                    "type": "dialogue",
+                    "text": norm_text,
+                    "character": pending_char_id,
+                    "x0": x0,
+                    "page": page_num,
+                    "para_break": para_break,
+                })
+            else:
+                # Inter-speech action line
+                state = 'action'
+                pending_char_id = None
+                classified.append({
+                    "type": "action",
+                    "text": norm_text,
+                    "x0": x0,
+                    "page": page_num,
+                    "para_break": para_break,
+                })
 
-    # Second pass: group consecutive same-type/same-character lines into paragraphs
-    # Lines with para_break=True start a new element even if same type
+        else:  # action
+            state = 'action'
+            pending_char_id = None
+            classified.append({
+                "type": "action",
+                "text": norm_text,
+                "x0": x0,
+                "page": page_num,
+                "para_break": para_break,
+            })
+
+    # Pass 2: group consecutive lines into paragraphs
+    elements = []
     i = 0
     while i < len(classified):
         el = classified[i]
         etype = el["type"]
 
-        # Character cues and scene headings are always single elements
-        if etype in ("character", "scene_heading", "transition", "parenthetical"):
+        # Scene headings, characters, parentheticals, transitions → single elements
+        if etype in ("scene_heading", "character", "parenthetical", "transition"):
             out = dict(el)
             out.setdefault("display_text", el["text"])
             elements.append(out)
             i += 1
             continue
 
-        # Action and dialogue: group lines that belong to the same paragraph
+        # Action and dialogue: group lines belonging to same paragraph
         j = i + 1
-        group_texts = [el["text"]]
+        parts = [el["text"]]
         while (j < len(classified) and
                classified[j]["type"] == etype and
                classified[j].get("character") == el.get("character") and
                not classified[j]["para_break"]):
-            group_texts.append(classified[j]["text"])
+            parts.append(classified[j]["text"])
             j += 1
 
         out = dict(el)
-        out["text"] = " ".join(group_texts)
-        out["display_text"] = " ".join(group_texts)  # reflow — no \n
+        out["text"] = " ".join(parts)
+        out["display_text"] = " ".join(parts)
         elements.append(out)
         i = j
 
@@ -233,62 +478,39 @@ def parse_annotated_lines(lines):
 
 
 # ---------------------------------------------------------------------------
-# FDX Parser
+# Auto-cast engine
 # ---------------------------------------------------------------------------
-def parse_fdx(file_path):
-    tree = ET.parse(file_path)
-    root = tree.getroot()
-    elements = []
-    pending_char = None
-    for para in root.iter("Paragraph"):
-        ptype = para.get("Type", "Action")
-        text = normalise("".join(t.text or "" for t in para.iter("Text")).strip())
-        if not text:
-            continue
-        if ptype == "Scene Heading":
-            elements.append({"type": "scene_heading", "text": text.upper(),
-                             "display_text": text.upper(), "page": 1})
-            pending_char = None
-        elif ptype == "Transition":
-            elements.append({"type": "transition", "text": text, "display_text": text, "page": 1})
-            pending_char = None
-        elif ptype == "Character":
-            char_name = strip_extension(text); pending_char = char_name
-            elements.append({"type": "character", "text": char_name, "display_text": text,
-                             "character": char_name, "page": 1})
-        elif ptype == "Parenthetical":
-            elements.append({"type": "parenthetical", "text": text, "display_text": text,
-                             "character": pending_char, "page": 1})
-        elif ptype == "Dialogue":
-            elements.append({"type": "dialogue", "text": text, "display_text": text,
-                             "character": pending_char, "page": 1})
-        else:
-            elements.append({"type": "action", "text": text, "display_text": text, "page": 1})
-            pending_char = None
-    return elements, {}
-
-
-# ---------------------------------------------------------------------------
-# Auto-cast
-# ---------------------------------------------------------------------------
-GENDER_MALE   = {"he","him","his","man","boy","father","dad","brother","son","uncle","grandfather","husband","mr","sir","gentleman","male","guy","dude","lad"}
-GENDER_FEMALE = {"she","her","woman","girl","mother","mom","mum","sister","daughter","aunt","grandmother","wife","mrs","ms","miss","lady","female","gal","lass"}
+GENDER_MALE   = {"he","him","his","man","boy","father","dad","brother","son",
+                 "uncle","grandfather","husband","mr","sir","gentleman",
+                 "male","guy","dude","lad"}
+GENDER_FEMALE = {"she","her","woman","girl","mother","mom","mum","sister",
+                 "daughter","aunt","grandmother","wife","mrs","ms","miss",
+                 "lady","female","gal","lass"}
 AGE_KEYWORDS  = {
-    "child":{"child","kid","young","teenager","teen","baby","infant","toddler"},
-    "20s":{"twenties","twenty","college"},"30s":{"thirties","thirty","adult"},
-    "40s":{"forties","forty","middle-aged"},"50s":{"fifties","fifty","mature"},
-    "60s":{"sixties","sixty","senior"},"elderly":{"elderly","old","aged","ancient","veteran"},
+    "child":   {"child","kid","young","teenager","teen","baby","infant"},
+    "20s":     {"twenties","twenty","college"},
+    "30s":     {"thirties","thirty","adult"},
+    "40s":     {"forties","forty","middle-aged"},
+    "50s":     {"fifties","fifty","mature"},
+    "60s":     {"sixties","sixty","senior"},
+    "elderly": {"elderly","old","aged","ancient","veteran","weathered"},
 }
 ACCENT_KEYWORDS = {
-    "british":{"british","english","london","cockney","scottish","irish","welsh","posh"},
-    "american":{"american","brooklyn","texan","southern","midwestern","california"},
-    "australian":{"australian","aussie"},
+    "british":    {"british","english","london","cockney","scottish",
+                   "irish","welsh","posh","oxford"},
+    "american":   {"american","brooklyn","texan","southern",
+                   "midwestern","california","boston"},
+    "australian": {"australian","aussie"},
 }
 TRAIT_KEYWORDS = {
-    "deep":{"deep","bass","baritone","low","booming"},"high":{"high","squeaky","shrill"},
-    "raspy":{"raspy","gruff","gravelly","hoarse"},"soft":{"soft","gentle","quiet","whispery"},
-    "warm":{"warm","friendly","inviting"},"bright":{"bright","cheerful","energetic","bubbly"},
+    "deep":   {"deep","bass","baritone","low","booming"},
+    "high":   {"high","squeaky","shrill"},
+    "raspy":  {"raspy","gruff","gravelly","hoarse"},
+    "soft":   {"soft","gentle","quiet","whispery"},
+    "warm":   {"warm","friendly","inviting"},
+    "bright": {"bright","cheerful","energetic","bubbly"},
 }
+
 VOICE_LIBRARY = [
     {"id":"en-GB-RyanNeural","gender":"male","accent":"british","age":"30s","traits":["warm","smooth"]},
     {"id":"en-GB-SoniaNeural","gender":"female","accent":"british","age":"30s","traits":["warm","clear"]},
@@ -312,27 +534,35 @@ VOICE_LIBRARY = [
     {"id":"en-IE-EmilyNeural","gender":"female","accent":"british","age":"20s","traits":["soft","warm"]},
 ]
 
-def scrape_character_profile(char_name, elements):
-    first_idx = next((i for i, e in enumerate(elements) if e.get("character") == char_name), None)
-    if first_idx is None: return {}
+def scrape_character_profile(char_id, elements):
+    first_idx = next((i for i, e in enumerate(elements)
+                      if e.get("character") == char_id), None)
+    if first_idx is None:
+        return {}
     words = set()
     for el in elements[max(0,first_idx-5):min(len(elements),first_idx+10)]:
         if el["type"] == "action":
             tl = el["text"].lower()
-            if char_name.lower() in tl:
-                idx = tl.index(char_name.lower())
-                words.update(tl[max(0,idx-50):idx+80].split())
+            # char_id may contain underscores — check both forms
+            name_variants = [char_id.lower(), char_id.lower().replace("_"," ")]
+            for variant in name_variants:
+                if variant in tl:
+                    idx = tl.index(variant)
+                    words.update(tl[max(0,idx-50):idx+80].split())
     pw = set(); pc = 0
     for el in elements:
-        if el.get("character") == char_name and el["type"] == "parenthetical" and pc < 3:
+        if el.get("character") == char_id and el["type"] == "parenthetical" and pc < 3:
             pw.update(el["text"].lower().split()); pc += 1
     all_w = words | pw
     ms = sum(1 for w in all_w if w in GENDER_MALE)
     fs = sum(1 for w in all_w if w in GENDER_FEMALE)
     gender = "male" if ms > fs else ("female" if fs > ms else None)
-    age    = next((ag for ag, kws in AGE_KEYWORDS.items() if any(w in all_w for w in kws)), None)
-    accent = next((ac for ac, kws in ACCENT_KEYWORDS.items() if any(w in all_w for w in kws)), None)
-    traits = [t for t, kws in TRAIT_KEYWORDS.items() if any(w in all_w for w in kws)]
+    age    = next((ag for ag, kws in AGE_KEYWORDS.items()
+                   if any(w in all_w for w in kws)), None)
+    accent = next((ac for ac, kws in ACCENT_KEYWORDS.items()
+                   if any(w in all_w for w in kws)), None)
+    traits = [t for t, kws in TRAIT_KEYWORDS.items()
+              if any(w in all_w for w in kws)]
     return {"gender": gender, "age": age, "accent": accent, "traits": traits}
 
 def score_voice(v, p):
@@ -348,46 +578,54 @@ def score_voice(v, p):
 def auto_cast(characters, elements):
     counts = {}
     for el in elements:
-        if el.get("character"): counts[el["character"]] = counts.get(el["character"],0)+1
+        if el.get("character"):
+            counts[el["character"]] = counts.get(el["character"], 0) + 1
     used = set(); casting = {}
-    for char in sorted(characters, key=lambda c: counts.get(c,0), reverse=True):
+    for char in sorted(characters, key=lambda c: counts.get(c, 0), reverse=True):
         profile   = scrape_character_profile(char, elements)
         available = [v for v in VOICE_LIBRARY if v["id"] not in used] or VOICE_LIBRARY
         best      = max(available, key=lambda v: score_voice(v, profile))
-        casting[char] = {"voice_id": best["id"], "gender": best["gender"],
-                         "accent": best["accent"], "age": best["age"], "profile": profile}
+        casting[char] = {
+            "voice_id": best["id"], "gender": best["gender"],
+            "accent": best["accent"], "age": best["age"], "profile": profile
+        }
         used.add(best["id"])
     return casting
 
 
 # ---------------------------------------------------------------------------
-# Sentiment / TTS
+# Sentiment detection → TTS parameters
 # ---------------------------------------------------------------------------
 SENTIMENT_PARAMS = {
-    "whisper":{"rate":"-20%","volume":"-30%","pitch":"-5Hz"},
-    "shout":  {"rate":"+10%","volume":"+20%","pitch":"+10Hz"},
-    "angry":  {"rate":"+10%","volume":"+10%","pitch":"+5Hz"},
-    "sad":    {"rate":"-10%","volume":"-10%","pitch":"-10Hz"},
-    "excited":{"rate":"+15%","volume":"+10%","pitch":"+8Hz"},
-    "scared": {"rate":"+10%","volume":"-5%", "pitch":"+5Hz"},
-    "calm":   {"rate":"-5%", "volume":"0%",  "pitch":"-5Hz"},
+    "whisper": {"rate":"-20%","volume":"-30%","pitch":"-5Hz"},
+    "shout":   {"rate":"+10%","volume":"+20%","pitch":"+10Hz"},
+    "angry":   {"rate":"+10%","volume":"+10%","pitch":"+5Hz"},
+    "sad":     {"rate":"-10%","volume":"-10%","pitch":"-10Hz"},
+    "excited": {"rate":"+15%","volume":"+10%","pitch":"+8Hz"},
+    "scared":  {"rate":"+10%","volume":"-5%", "pitch":"+5Hz"},
+    "calm":    {"rate":"-5%", "volume":"0%",  "pitch":"-5Hz"},
 }
 SENTIMENT_KEYWORDS = {
-    "whisper":{"whisper","sotto voce","quietly","hushed"},
-    "shout":  {"shout","yell","scream","bellowing"},
-    "angry":  {"angry","furious","rage","irate","livid"},
-    "sad":    {"sad","crying","sobbing","weeping","tearful"},
-    "excited":{"excited","enthusiasm","eager","thrilled"},
-    "scared": {"scared","frightened","terrified","trembling"},
-    "calm":   {"calm","soothing","gentle","peaceful"},
+    "whisper": {"whisper","sotto voce","quietly","hushed"},
+    "shout":   {"shout","yell","scream","bellowing"},
+    "angry":   {"angry","furious","rage","irate","livid"},
+    "sad":     {"sad","crying","sobbing","weeping","tearful"},
+    "excited": {"excited","enthusiasm","eager","thrilled"},
+    "scared":  {"scared","frightened","terrified","trembling"},
+    "calm":    {"calm","soothing","gentle","peaceful"},
 }
 
 def detect_sentiment(text):
     words = set(text.lower().split())
     for s, kws in SENTIMENT_KEYWORDS.items():
-        if words & kws: return SENTIMENT_PARAMS[s]
+        if words & kws:
+            return SENTIMENT_PARAMS[s]
     return {}
 
+
+# ---------------------------------------------------------------------------
+# Audio cache (SHA256 keyed MP3 files)
+# ---------------------------------------------------------------------------
 def cache_key(text, voice_id):
     return hashlib.sha256(f"{text}|{voice_id}|edge-tts".encode()).hexdigest()
 
@@ -398,20 +636,23 @@ def get_cached(text, voice_id):
 def save_cache(text, voice_id, audio_bytes):
     (CACHE_DIR / f"{cache_key(text, voice_id)}.mp3").write_bytes(audio_bytes)
 
-async def synthesise_async(text, voice_id, rate, volume, pitch):
-    communicate = edge_tts.Communicate(text, voice_id, rate=rate, volume=volume, pitch=pitch)
+async def _synth_async(text, voice_id, rate, volume, pitch):
+    comm = edge_tts.Communicate(text, voice_id,
+                                 rate=rate, volume=volume, pitch=pitch)
     chunks = []
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio": chunks.append(chunk["data"])
+    async for chunk in comm.stream():
+        if chunk["type"] == "audio":
+            chunks.append(chunk["data"])
     return b"".join(chunks)
 
 def synthesise(text, voice_id, sentiment_params=None):
     cached = get_cached(text, voice_id)
-    if cached: return cached
+    if cached:
+        return cached
     p = sentiment_params or {}
     loop = asyncio.new_event_loop()
     try:
-        audio = loop.run_until_complete(synthesise_async(
+        audio = loop.run_until_complete(_synth_async(
             expand_abbrevs(text), voice_id,
             p.get("rate","+0%"), p.get("volume","+0%"), p.get("pitch","+0Hz")))
     finally:
@@ -421,7 +662,7 @@ def synthesise(text, voice_id, sentiment_params=None):
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Flask routes
 # ---------------------------------------------------------------------------
 @app.route("/health")
 def health():
@@ -440,9 +681,12 @@ def upload():
     tmp = f"/tmp/scriptcast_upload.{ext}"
     f.save(tmp)
     try:
-        if ext == "pdf":   elements, page_headers = parse_pdf(tmp)
-        elif ext == "fdx": elements, page_headers = parse_fdx(tmp)
-        else: return jsonify({"error": "Unsupported file type. Use .pdf or .fdx"}), 400
+        if ext == "pdf":
+            elements, page_headers = parse_pdf(tmp)
+        elif ext == "fdx":
+            elements, page_headers = parse_fdx(tmp)
+        else:
+            return jsonify({"error": "Unsupported file type. Use .pdf or .fdx"}), 400
     except Exception as e:
         return jsonify({"error": f"Parse error: {str(e)}"}), 500
 
@@ -452,9 +696,13 @@ def upload():
     for i, el in enumerate(elements):
         page_map.setdefault(str(el.get("page", 1)), []).append(i)
 
-    return jsonify({"elements": elements, "casting": casting,
-                    "page_map": page_map, "page_headers": page_headers,
-                    "characters": characters})
+    return jsonify({
+        "elements":     elements,
+        "casting":      casting,
+        "page_map":     page_map,
+        "page_headers": page_headers,
+        "characters":   characters,
+    })
 
 @app.route("/tts", methods=["POST"])
 def tts():
@@ -462,7 +710,8 @@ def tts():
     text  = data.get("text", "").strip()
     voice = data.get("voice_id", "en-GB-RyanNeural")
     paren = data.get("parenthetical", "")
-    if not text: return jsonify({"error": "No text provided"}), 400
+    if not text:
+        return jsonify({"error": "No text provided"}), 400
     try:
         audio = synthesise(text, voice, detect_sentiment(paren) if paren else {})
     except Exception as e:
