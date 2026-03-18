@@ -266,8 +266,9 @@ def classify_line(x0, text):
         return 'action', stripped  # fallback
 
     if x0 >= THRESH['character_left']:
-        # Character zone — must be ALL CAPS (no lowercase)
-        if not any(c.islower() for c in stripped):
+        # Character zone — must be ALL CAPS, not a known non-character phrase
+        if (not any(c.islower() for c in stripped) and
+                not NON_CHAR_PAT.match(stripped)):
             return 'character', stripped
         return 'dialogue', stripped  # wrapped dialogue line
 
@@ -287,6 +288,7 @@ def parse_pdf(file_path):
     elements = []
     page_headers = {}
 
+    all_annotated = []
     with pdfplumber.open(file_path) as pdf:
         for page_num, page in enumerate(pdf.pages, 1):
             words = page.extract_words(extra_attrs=["size"])
@@ -334,8 +336,9 @@ def parse_pdf(file_path):
                               (y_key - sorted_ys[idx-1]) > para_threshold)
                 annotated.append((page_num, text, x0, para_break))
 
-            elements.extend(_classify_annotated(annotated))
+            all_annotated.extend(annotated)
 
+    elements = _classify_annotated(all_annotated)
     return elements, page_headers
 
 
@@ -348,6 +351,7 @@ def _classify_annotated(lines):
     classified = []
     pending_char_id = None
     state = 'action'
+    found_first_scene = False  # skip title page content
 
     for page_num, text, x0, para_break in lines:
         stripped = text.strip()
@@ -361,6 +365,13 @@ def _classify_annotated(lines):
             continue
         if STRIP_PAT.match(stripped):
             continue
+
+        # Track first scene heading — skip title page content before it
+        if not found_first_scene:
+            if SCENE_PREFIXES.match(stripped) or SCENE_NUMBERED.match(stripped):
+                found_first_scene = True
+            else:
+                continue  # skip title page
 
         etype, norm_text = classify_line(x0, stripped)
         if etype is None:
