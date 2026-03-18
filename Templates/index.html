@@ -61,16 +61,18 @@
     color: var(--muted);
   }
   .step-dot {
-    width: 28px; height: 28px;
-    border-radius: 50%;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    cursor: pointer; padding: 4px 8px; border-radius: 8px;
     border: 1.5px solid var(--border);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; font-weight: 600;
-    transition: all .3s;
+    transition: all .3s; min-width: 80px;
   }
+  .step-dot:hover { border-color: var(--accent); }
   .step-dot.active  { border-color: var(--accent); color: var(--accent); }
-  .step-dot.done    { background: var(--accent); border-color: var(--accent); color: #000; }
-  .step-line { width: 32px; height: 1px; background: var(--border); }
+  .step-dot.done    { background: rgba(232,184,75,.12); border-color: var(--accent); color: var(--accent); }
+  .dot-num { font-size: 12px; font-weight: 700; }
+  .dot-label { font-size: 10px; color: var(--muted); white-space: nowrap; }
+  .step-dot.active .dot-label, .step-dot.done .dot-label { color: var(--accent); }
+  .step-line { width: 24px; height: 1px; background: var(--border); }
 
   main { flex: 1; padding: 40px 32px; max-width: 1200px; margin: 0 auto; width: 100%; }
 
@@ -605,11 +607,17 @@
   <header>
     <div class="logo">Script<span>Cast</span></div>
     <div class="step-indicator">
-      <div class="step-dot active" id="dot-1">1</div>
+      <div class="step-dot active" id="dot-1" onclick="tryGoStep(1)" title="Upload">
+        <span class="dot-num">1</span><span class="dot-label">Upload</span>
+      </div>
       <div class="step-line"></div>
-      <div class="step-dot" id="dot-2">2</div>
+      <div class="step-dot" id="dot-2" onclick="tryGoStep(2)" title="Assign Voices">
+        <span class="dot-num">2</span><span class="dot-label">Assign Voices</span>
+      </div>
       <div class="step-line"></div>
-      <div class="step-dot" id="dot-3">3</div>
+      <div class="step-dot" id="dot-3" onclick="tryGoStep(3)" title="Playback">
+        <span class="dot-num">3</span><span class="dot-label">Playback</span>
+      </div>
     </div>
     <div style="width:120px"></div>
   </header>
@@ -659,7 +667,7 @@
         <div class="page-toolbar">
           <div class="page-nav">
             <button onclick="prevPage()">‹</button>
-            <span id="page-label">Page 1</span>
+            <span id="page-label">Page 1 of 1</span>
             <button onclick="nextPage()">›</button>
           </div>
           <input class="search-box" id="search-input" placeholder="Search script…" oninput="searchScript(this.value)">
@@ -696,6 +704,10 @@
         <div class="dojo-panel">
           <div class="dojo-title">🎭 Actor's Dojo</div>
           <div class="dojo-sub">Mute characters to rehearse your lines</div>
+          <div class="dojo-char-row" style="margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:12px;">
+            <span class="dojo-char-name" style="font-size:12px;color:var(--muted);">Announce character name</span>
+            <div class="toggle-switch active" id="toggle-announce" onclick="toggleAnnounce()"></div>
+          </div>
           <div id="dojo-chars"></div>
         </div>
 
@@ -722,6 +734,8 @@ let playSpeed   = 1.0;
 let mutedChars  = new Set();
 let audioQueue  = {};   // preloaded: idx -> ArrayBuffer
 let currentAudio = null;
+let userBrowsing = false;  // true when user manually changes page
+let userBrowseTimer = null;
 
 // ── Upload ───────────────────────────────────────────────────────────────
 const dropZone  = document.getElementById("drop-zone");
@@ -926,7 +940,8 @@ function jumpToScene(idx) {
 // ── Page rendering ────────────────────────────────────────────────────────
 function renderPage(page) {
   currentPage = page;
-  document.getElementById("page-label").textContent = `Page ${page}`;
+  const totalPages = Object.keys(pageMap).length;
+  document.getElementById("page-label").textContent = `Page ${page} of ${totalPages}`;
 
   const allEls = document.querySelectorAll(".el");
   allEls.forEach(e => e.style.display = "none");
@@ -966,13 +981,20 @@ function renderPage(page) {
 function prevPage() {
   const pages = Object.keys(pageMap).map(Number);
   const min = Math.min(...pages);
-  if (currentPage > min) renderPage(currentPage - 1);
+  if (currentPage > min) { setUserBrowsing(); renderPage(currentPage - 1); }
 }
 
 function nextPage() {
   const pages = Object.keys(pageMap).map(Number);
   const max = Math.max(...pages);
-  if (currentPage < max) renderPage(currentPage + 1);
+  if (currentPage < max) { setUserBrowsing(); renderPage(currentPage + 1); }
+}
+
+function setUserBrowsing() {
+  userBrowsing = true;
+  clearTimeout(userBrowseTimer);
+  // Auto-resume following playback after 8 seconds of no manual navigation
+  userBrowseTimer = setTimeout(() => { userBrowsing = false; }, 8000);
 }
 
 // ── Playback engine ───────────────────────────────────────────────────────
@@ -1037,6 +1059,10 @@ async function playNext() {
       await sleep(800 / playSpeed);
     }
     currentIdx++;
+    // Small breath after scene headings, longer after transitions
+    if (el.type === "transition") await sleep(600 / playSpeed);
+    else if (el.type === "scene_heading") await sleep(400 / playSpeed);
+    if (!playing) return;
     playNext();
     return;
   }
@@ -1059,6 +1085,20 @@ async function playNext() {
     return;
   }
 
+  // Announce character name before first dialogue line of a speech (if enabled)
+  if (announceCharName && el.type === "dialogue" && el.character) {
+    const prevEl = elements[currentIdx - 1];
+    const isNewSpeech = !prevEl || prevEl.type !== "dialogue" || prevEl.character !== el.character;
+    if (isNewSpeech) {
+      try {
+        const nameAudio = await fetchNameAudio(el.character);
+        if (!playing) return;
+        await playAudio(nameAudio);
+        if (!playing) return;
+      } catch(e) { /* skip name if fails */ }
+    }
+  }
+
   // Get audio
   try {
     const audioData = await getAudio(currentIdx, el);
@@ -1066,6 +1106,12 @@ async function playNext() {
     await playAudio(audioData);
     if (!playing) return;
     currentIdx++;
+    // Brief pause between speakers for natural flow
+    const nextEl = elements[currentIdx];
+    if (el.type === "dialogue" && nextEl && nextEl.type === "dialogue" && nextEl.character !== el.character) {
+      await sleep(300 / playSpeed);
+    }
+    if (!playing) return;
     playNext();
   } catch(e) {
     console.error("TTS error:", e);
@@ -1107,6 +1153,24 @@ async function getAudio(idx, el) {
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   audioQueue[idx] = bytes.buffer;
   return audioQueue[idx];
+}
+
+// Cache for character name audio
+const nameAudioCache = {};
+async function fetchNameAudio(charName) {
+  if (nameAudioCache[charName]) return nameAudioCache[charName];
+  const resp = await fetch("/tts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text: charName, voice_id: "en-GB-RyanNeural", element_type: "action" })
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error);
+  const binary = atob(data.audio);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  nameAudioCache[charName] = bytes.buffer;
+  return nameAudioCache[charName];
 }
 
 function preloadAhead(fromIdx) {
@@ -1166,7 +1230,9 @@ function highlightElement(idx) {
   const el = document.querySelector(`.el[data-idx="${idx}"]`);
   if (el) {
     el.classList.add("playing");
-    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (!userBrowsing) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
   }
 }
 
@@ -1177,6 +1243,7 @@ function updateNowPlaying(el) {
 }
 
 function ensurePageVisible(idx) {
+  if (userBrowsing) return;  // Don't hijack page when user is browsing
   const el = elements[idx];
   if (!el) return;
   const page = el.page || 1;
@@ -1206,6 +1273,29 @@ function goUpload() {
   [1,2,3].forEach(n => {
     document.getElementById(`dot-${n}`).className = "step-dot" + (n===1?" active":"");
   });
+}
+
+function tryGoStep(step) {
+  if (step === 1) { goUpload(); return; }
+  if (step === 2 && elements.length > 0) {
+    pause();
+    goScreen("screen-cast");
+    document.getElementById("dot-1").className = "step-dot done";
+    document.getElementById("dot-2").className = "step-dot active";
+    document.getElementById("dot-3").className = "step-dot";
+    return;
+  }
+  if (step === 3 && elements.length > 0) {
+    goPlayback(); return;
+  }
+}
+
+// Announce character name before dialogue
+let announceCharName = true;
+function toggleAnnounce() {
+  announceCharName = !announceCharName;
+  const el = document.getElementById("toggle-announce");
+  el.classList.toggle("active", announceCharName);
 }
 
 function goScreen(id) {
@@ -1238,6 +1328,22 @@ function showToast(msg) {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+  // Space = play/pause (only in playback screen)
+  if (e.code === "Space" && document.getElementById("playback-screen").classList.contains("active")) {
+    e.preventDefault();
+    togglePlay();
+  }
+  // Arrow keys = page navigation (independent of playback)
+  if (e.code === "ArrowRight" && document.getElementById("playback-screen").classList.contains("active")) {
+    e.preventDefault(); setUserBrowsing(); nextPage();
+  }
+  if (e.code === "ArrowLeft" && document.getElementById("playback-screen").classList.contains("active")) {
+    e.preventDefault(); setUserBrowsing(); prevPage();
+  }
+});
 
 function scalePageToFit() {
   const wrapper = document.querySelector('.page-wrapper');
