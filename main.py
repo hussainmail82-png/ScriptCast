@@ -814,9 +814,15 @@ def tts():
     el_type  = data.get("element_type", "")
     if not text:
         return jsonify({"error": "No text provided"}), 400
-    # Format scene headings for natural narration
+    # Format text for natural narration based on element type
     if el_type == "scene_heading":
         tts_text = format_scene_heading_tts(text)
+    elif el_type == "parenthetical":
+        # Strip brackets: "(Mumbles, slow)" → "Mumbles, slow"
+        tts_text = re.sub(r"^\s*\(|\)\s*$", "", text).strip()
+    elif el_type == "transition":
+        # Natural reading: "CUT TO:" → "Cut to."
+        tts_text = text.rstrip(":").replace(".", "").title() + "."
     else:
         tts_text = text
     try:
