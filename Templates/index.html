@@ -1000,6 +1000,8 @@ async function playNext() {
     const el = elements[currentIdx];
     if (el.type === "dialogue" || el.type === "action") break;
     if (el.type === "scene_heading") break;
+    if (el.type === "parenthetical") break;
+    if (el.type === "transition") break;
     currentIdx++;
   }
 
@@ -1024,16 +1026,33 @@ async function playNext() {
     return;
   }
 
-  // Scene headings — narrate using the narrator voice
-  if (el.type === "scene_heading") {
+  // Scene headings and transitions — narrate using narrator voice
+  if (el.type === "scene_heading" || el.type === "transition") {
     try {
       const audioData = await getAudio(currentIdx, el);
       if (!playing) return;
       await playAudio(audioData);
       if (!playing) return;
     } catch(e) {
-      console.error("Scene heading TTS error:", e);
       await sleep(800 / playSpeed);
+    }
+    currentIdx++;
+    playNext();
+    return;
+  }
+
+  // Parentheticals — narrator reads the direction, then dialogue follows
+  if (el.type === "parenthetical") {
+    // Only read if character is not muted
+    if (!el.character || !mutedChars.has(el.character)) {
+      try {
+        const audioData = await getAudio(currentIdx, el);
+        if (!playing) return;
+        await playAudio(audioData);
+        if (!playing) return;
+      } catch(e) {
+        await sleep(300 / playSpeed);
+      }
     }
     currentIdx++;
     playNext();
@@ -1058,9 +1077,16 @@ async function playNext() {
 async function getAudio(idx, el) {
   if (audioQueue[idx]) return audioQueue[idx];
 
-  const voiceId = (el.character && casting[el.character])
-    ? casting[el.character].voice_id
-    : "en-GB-RyanNeural";
+  // Narrator voice for scene headings/transitions, character voice for dialogue/parenthetical
+  const narratorVoice = "en-GB-RyanNeural";
+  let voiceId;
+  if (el.type === "scene_heading" || el.type === "transition" || el.type === "action") {
+    voiceId = narratorVoice;
+  } else {
+    voiceId = (el.character && casting[el.character])
+      ? casting[el.character].voice_id
+      : narratorVoice;
+  }
 
   // Find preceding parenthetical for sentiment
   let parenthetical = "";
@@ -1086,7 +1112,7 @@ async function getAudio(idx, el) {
 function preloadAhead(fromIdx) {
   for (let i = fromIdx; i < Math.min(fromIdx + 3, elements.length); i++) {
     const el = elements[i];
-    const isPlayable = el.type === "dialogue" || el.type === "action" || el.type === "scene_heading" || el.type === "transition";
+    const isPlayable = el.type === "dialogue" || el.type === "action" || el.type === "scene_heading" || el.type === "transition" || el.type === "parenthetical";
     const notMuted = !el.character || !mutedChars.has(el.character);
     if (isPlayable && !audioQueue[i] && notMuted) {
       getAudio(i, el).catch(() => {});
