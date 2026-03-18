@@ -157,6 +157,7 @@ def parse_fdx(file_path):
     elements = []
     pending_char = None
     pending_char_id = None
+    current_page = 1  # Track current page — updated at each scene heading
 
     for para in root.findall("./Content/Paragraph"):
         ptype = para.get("Type", "Action")
@@ -177,13 +178,14 @@ def parse_fdx(file_path):
             scene_num = para.get("Number", "")
             sp = para.find("SceneProperties")
             fdx_page = int(sp.get("Page", 1)) if sp is not None else 1
+            current_page = fdx_page + 1  # +1: FDX script pages are 1-indexed after title page
             display = f"{scene_num} {text} {scene_num}".strip() if scene_num else text
             elements.append({
                 "type": "scene_heading",
                 "text": text,
                 "display_text": display,
                 "scene_number": scene_num,
-                "page": fdx_page,
+                "page": current_page,
             })
             pending_char = None
             pending_char_id = None
@@ -194,7 +196,7 @@ def parse_fdx(file_path):
                 "type": "transition",
                 "text": text,
                 "display_text": text,
-                "page": 1,
+                "page": current_page,
             })
             pending_char = None
             pending_char_id = None
@@ -205,7 +207,7 @@ def parse_fdx(file_path):
                 "type": "shot",
                 "text": text,
                 "display_text": text,
-                "page": 1,
+                "page": current_page,
             })
 
         elif ptype == "Character":
@@ -219,7 +221,7 @@ def parse_fdx(file_path):
                 "text": char_id,
                 "display_text": display,
                 "character": char_id,
-                "page": 1,
+                "page": current_page,
             })
 
         elif ptype == "Parenthetical":
@@ -229,7 +231,7 @@ def parse_fdx(file_path):
                 "text": text,
                 "display_text": text,
                 "character": pending_char_id,
-                "page": 1,
+                "page": current_page,
             })
 
         elif ptype == "Dialogue":
@@ -240,7 +242,7 @@ def parse_fdx(file_path):
                 "text": text,
                 "display_text": text,
                 "character": pending_char_id,
-                "page": 1,
+                "page": current_page,
             })
 
         else:  # Action, General, Cast List, etc.
@@ -253,12 +255,17 @@ def parse_fdx(file_path):
                 "type": el_type,
                 "text": raw,
                 "display_text": raw,
-                "page": 1,
+                "page": current_page,
             })
             pending_char    = None
             pending_char_id = None
 
-    return elements, {}
+    # Build page_map from elements
+    page_map = {}
+    for i, el in enumerate(elements):
+        page_map.setdefault(el["page"], []).append(i)
+
+    return elements, page_map
 
 
 # ---------------------------------------------------------------------------
@@ -280,7 +287,8 @@ SCENE_NUMBERED = re.compile(
 # Spec §3.6 transitions
 TRANSITION_PAT = re.compile(
     r"^\s*(CUT TO:|FADE OUT\.|FADE TO:|FADE TO BLACK\.|DISSOLVE TO:|"
-    r"SMASH CUT TO:|MATCH CUT TO:|JUMP CUT TO:|BACK TO:|FADE IN:)\s*$",
+    r"SMASH CUT TO:|MATCH CUT TO:|JUMP CUT TO:|BACK TO:|FADE IN:|"
+    r"END\.|THE END\.?|TITLE CARD:|IRIS IN:|IRIS OUT\.)\s*$",
     re.IGNORECASE
 )
 
@@ -346,6 +354,10 @@ def classify_line(x0, text):
         return 'dialogue', stripped
 
     if x0 >= THRESH['dialogue_left']:
+        # Even in dialogue zone, if it looks like a parenthetical treat it as one
+        # Some PDFs render parens at ~209pt (between 180 and 216)
+        if stripped.startswith('(') and stripped.endswith(')'):
+            return 'parenthetical', stripped
         return 'dialogue', stripped
 
     # Action / scene heading zone (x0 < 180pt)
