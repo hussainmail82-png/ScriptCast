@@ -955,7 +955,8 @@ function jumpToScene(idx) {
 // ── Page rendering ────────────────────────────────────────────────────────
 function renderPage(page) {
   currentPage = page;
-  const totalPages = Object.keys(pageMap).length;
+  const pages = Object.keys(pageMap).map(Number);
+  const totalPages = pages.length > 0 ? Math.max(...pages) : 1;
   document.getElementById("page-label").textContent = `Page ${page} of ${totalPages}`;
 
   const allEls = document.querySelectorAll(".el");
@@ -1004,6 +1005,10 @@ function nextPage() {
   const max = Math.max(...pages);
   if (currentPage < max) { setUserBrowsing(); renderPage(currentPage + 1); }
 }
+
+// renderPage already handles missing pages gracefully (shows blank).
+// totalPages must span min→max, not just count of keys.
+
 
 function setUserBrowsing() {
   userBrowsing = true;
@@ -1158,7 +1163,7 @@ async function getAudio(idx, el) {
   const resp = await fetch("/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: el.text, voice_id: voiceId, parenthetical, element_type: el.type })
+    body: JSON.stringify({ text: (el.type === "scene_heading" ? (el.display_text || el.text) : el.text), voice_id: voiceId, parenthetical, element_type: el.type })
   });
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
