@@ -883,7 +883,7 @@ function buildScriptDisplay() {
       //   right number: page 698px - 144px margin-left - element width... use absolute right
       //   Right body edge ≈ 793-72=721px. Element right edge = 793-72=721px
       //   Right number at 698px from page = 698-144=554px from element left
-      const raw = el.text || '';
+      const raw = el.display_text || el.text || '';
       const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
       if (m) {
         div.innerHTML =
