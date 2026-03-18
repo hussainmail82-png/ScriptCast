@@ -169,11 +169,16 @@ def parse_fdx(file_path):
 
         if ptype == "Scene Heading":
             text = raw.upper()  # Spec §11.3 — always uppercase
+            scene_num = para.get("Number", "")
+            sp = para.find("SceneProperties")
+            fdx_page = int(sp.get("Page", 1)) if sp is not None else 1
+            display = f"{scene_num} {text} {scene_num}".strip() if scene_num else text
             elements.append({
                 "type": "scene_heading",
                 "text": text,
-                "display_text": text,
-                "page": 1,
+                "display_text": display,
+                "scene_number": scene_num,
+                "page": fdx_page,
             })
             pending_char = None
             pending_char_id = None
@@ -281,6 +286,11 @@ STRIP_PAT = re.compile(
 PAGE_NUM_PAT = re.compile(r"^\s*\d+\.?\s*$")
 # Doubled page number artefact from some PDF renderers: "22.." "33.." "44.."
 DOUBLED_PAGE_PAT = re.compile(r"^(\d)\1\.{2}$|^(\d{2})\2\.{2}$")
+NON_CHAR_PAT = re.compile(
+    r"^\s*(WRITTEN BY|DIRECTED BY|PRODUCED BY|THE END|TITLE CARD|SUPER|"
+    r"FADE IN\.?|FADE OUT\.?|SMASH CUT|CUT TO|DISSOLVE TO|BLACK|"
+    r"CONTINUED|MORE|END\.)\s*$", re.IGNORECASE
+)
 
 # Spec §2.1 — indent thresholds in points (1" = 72pt)
 # US Letter 8.5" page. pdfplumber x0 is from left edge of page.
