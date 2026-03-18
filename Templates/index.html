@@ -669,6 +669,10 @@
       <div class="cast-grid" id="cast-grid"></div>
       <div class="action-row">
         <button class="btn btn-ghost" onclick="goUpload()">← Re-upload</button>
+        <div class="announce-toggle-row" style="flex:1; justify-content:center;">
+          <span class="announce-label">Read character names aloud</span>
+          <div class="toggle-switch active" id="toggle-announce-cast" onclick="toggleAnnounce()" title="Narrator reads the character name before each speech"></div>
+        </div>
         <button class="btn btn-primary" onclick="goPlayback()">Start playback →</button>
       </div>
     </div>
@@ -1314,8 +1318,11 @@ function tryGoStep(step) {
 let announceCharName = true;
 function toggleAnnounce() {
   announceCharName = !announceCharName;
-  const el = document.getElementById("toggle-announce");
-  el.classList.toggle("active", announceCharName);
+  // Sync both toggles (Step 2 cast screen + Step 3 playback panel)
+  ["toggle-announce", "toggle-announce-cast"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle("active", announceCharName);
+  });
 }
 
 function goScreen(id) {
