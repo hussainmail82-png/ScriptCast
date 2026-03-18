@@ -352,6 +352,8 @@ def parse_pdf(file_path):
     page_headers = {}
 
     all_annotated = []
+    title_page_elements = []  # raw title page lines, displayed but not parsed as script
+
     with pdfplumber.open(file_path) as pdf:
         for page_num, page in enumerate(pdf.pages, 1):
             words = page.extract_words(extra_attrs=["size"])
@@ -404,9 +406,24 @@ def parse_pdf(file_path):
                               (y_key - sorted_ys[idx-1]) > para_threshold)
                 annotated.append((page_num, text, x0, para_break))
 
-            all_annotated.extend(annotated)
+            # Capture title page (page 1) content directly as action elements
+            # so it displays without being classified as script elements
+            if page_num == 1:
+                for pg, text, x0, pb in annotated:
+                    stripped = text.strip()
+                    if stripped and not is_artefact_line(stripped):
+                        title_page_elements.append({
+                            "type": "action",
+                            "text": stripped,
+                            "display_text": stripped,
+                            "page": 1,
+                        })
+            else:
+                all_annotated.extend(annotated)
 
-    elements = _classify_annotated(all_annotated)
+    script_elements = _classify_annotated(all_annotated)
+    # Prepend title page elements so pageMap includes page 1
+    elements = title_page_elements + script_elements
     return elements, page_headers
 
 
