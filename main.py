@@ -411,7 +411,7 @@ def parse_pdf(file_path):
             if page_num == 1:
                 for pg, text, x0, pb in annotated:
                     stripped = text.strip()
-                    if stripped and not is_artefact_line(stripped):
+                    if stripped and not PAGE_NUM_PAT.match(stripped) and not STRIP_PAT.match(stripped) and not DOUBLED_PAGE_PAT.match(stripped):
                         title_page_elements.append({
                             "type": "action",
                             "text": stripped,
