@@ -62,6 +62,52 @@ def expand_abbrevs(text):
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
     return text
 
+# Scene heading tokens → spoken form
+_SCENE_INT_EXT = [
+    (re.compile(r'INT\./EXT\.', re.I), 'Interior Exterior'),
+    (re.compile(r'EXT\./INT\.', re.I), 'Exterior Interior'),
+    (re.compile(r'I/E\.?',      re.I), 'Interior Exterior'),
+    (re.compile(r'INT\.?',      re.I), 'Interior'),
+    (re.compile(r'EXT\.?',      re.I), 'Exterior'),
+]
+# Scene number pattern: leading/trailing digits
+_SCENE_NUM = re.compile(r'^(\d+[A-Z]?)\s+(.*?)(?:\s+(\d+[A-Z]?))?\s*$')
+
+def format_scene_heading_tts(raw):
+    """
+    Convert a scene heading to natural spoken form for TTS.
+    "1 EXT. BOAT. DAY. 1"  →  "Scene 1. Exterior. Boat. Day."
+    "2 INT. CHARLES HOUSE. CONTINUOUS. 2"  →  "Scene 2. Interior. Charles House. Continuous."
+    """
+    text = raw.strip()
+
+    # Extract scene number if present
+    m = _SCENE_NUM.match(text)
+    if m:
+        scene_num   = m.group(1)
+        heading_body = m.group(2).strip()
+        prefix = f"Scene {scene_num}. "
+    else:
+        scene_num    = None
+        heading_body = text
+        prefix       = "Scene. "
+
+    # Replace INT./EXT. abbreviations
+    for pat, rep in _SCENE_INT_EXT:
+        heading_body = pat.sub(rep, heading_body)
+
+    # Replace separator dashes with pauses
+    heading_body = re.sub(r'\s*[-–—]+\s*', '. ', heading_body)
+
+    # Remove trailing dots/spaces then add final period
+    heading_body = heading_body.strip('. ').strip()
+
+    # Capitalise each segment nicely
+    parts = [p.strip().capitalize() for p in heading_body.split('.') if p.strip()]
+    spoken = prefix + '. '.join(parts) + '.'
+
+    return spoken
+
 # ---------------------------------------------------------------------------
 # Character ID normalisation (Spec §6.2)
 # Handles: "JiM:", "GrACE:", "Jim", "GRACE (CONT'D)" → "JIM", "GRACE"
@@ -720,14 +766,20 @@ def upload():
 
 @app.route("/tts", methods=["POST"])
 def tts():
-    data  = request.get_json()
-    text  = data.get("text", "").strip()
-    voice = data.get("voice_id", "en-GB-RyanNeural")
-    paren = data.get("parenthetical", "")
+    data     = request.get_json()
+    text     = data.get("text", "").strip()
+    voice    = data.get("voice_id", "en-GB-RyanNeural")
+    paren    = data.get("parenthetical", "")
+    el_type  = data.get("element_type", "")
     if not text:
         return jsonify({"error": "No text provided"}), 400
+    # Format scene headings for natural narration
+    if el_type == "scene_heading":
+        tts_text = format_scene_heading_tts(text)
+    else:
+        tts_text = text
     try:
-        audio = synthesise(text, voice, detect_sentiment(paren) if paren else {})
+        audio = synthesise(tts_text, voice, detect_sentiment(paren) if paren else {})
     except Exception as e:
         return jsonify({"error": f"TTS error: {str(e)}"}), 500
     import base64
