@@ -73,11 +73,14 @@ SLUGIFY       = re.compile(r"[\s\-]+")
 
 def normalise_character_id(raw):
     s = raw.strip().upper()
-    s = STRIP_COLON.sub("", s)
-    s = QUALIFIER_PAT.sub("", s).strip()
+    # Strip ALL parenthetical content anywhere in string (spec §6.2)
+    s = re.sub(r"\s*\([^)]*\)\s*", " ", s).strip()
+    # Strip trailing colon(s)
+    s = STRIP_COLON.sub("", s).strip()
+    # Collapse whitespace
     s = re.sub(r"\s+", " ", s)
-    s = STRIP_ENDS.sub("", s)
-    s = SLUGIFY.sub("_", s)
+    # Strip non-name chars from ends
+    s = STRIP_ENDS.sub("", s).strip()
     return s
 
 # Auto-inserted strings to strip from character/dialogue (Spec §10)
