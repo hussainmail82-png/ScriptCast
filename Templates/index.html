@@ -831,7 +831,10 @@ function goPlayback() {
   buildSceneDropdown();
   goScreen("playback-screen");
   stepDone(2);
-  renderPage(1);
+  // Start on first page that has content
+  const pages = Object.keys(pageMap).map(Number).sort((a,b) => a-b);
+  const firstPage = pages.find(p => (pageMap[String(p)] || []).length > 0) || 1;
+  renderPage(firstPage);
   preloadAhead(0);
 }
 
@@ -931,7 +934,10 @@ function renderPage(page) {
   allEls.forEach(e => e.style.display = "none");
 
   const indices = pageMap[String(page)] || [];
-  if (indices.length === 0) return;
+  if (indices.length === 0) {
+    // Empty page (e.g. title page) — show blank
+    return;
+  }
 
   indices.forEach(i => {
     const el = document.querySelector(`.el[data-idx="${i}"]`);
@@ -1020,9 +1026,17 @@ async function playNext() {
     return;
   }
 
-  // Non-dialogue scene headings — just advance after brief pause
+  // Scene headings — narrate using the narrator voice
   if (el.type === "scene_heading") {
-    await sleep(600 / playSpeed);
+    try {
+      const audioData = await getAudio(currentIdx, el);
+      if (!playing) return;
+      await playAudio(audioData);
+      if (!playing) return;
+    } catch(e) {
+      console.error("Scene heading TTS error:", e);
+      await sleep(800 / playSpeed);
+    }
     currentIdx++;
     playNext();
     return;
@@ -1074,7 +1088,9 @@ async function getAudio(idx, el) {
 function preloadAhead(fromIdx) {
   for (let i = fromIdx; i < Math.min(fromIdx + 3, elements.length); i++) {
     const el = elements[i];
-    if ((el.type === "dialogue" || el.type === "action") && !audioQueue[i] && el.character && !mutedChars.has(el.character)) {
+    const isPlayable = el.type === "dialogue" || el.type === "action" || el.type === "scene_heading" || el.type === "transition";
+    const notMuted = !el.character || !mutedChars.has(el.character);
+    if (isPlayable && !audioQueue[i] && notMuted) {
       getAudio(i, el).catch(() => {});
     }
   }
