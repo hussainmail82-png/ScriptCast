@@ -234,8 +234,13 @@ def parse_fdx(file_path):
             })
 
         else:  # Action, General, Cast List, etc.
+            # Treat END. / THE END / FADE OUT. etc as transitions
+            el_type = "action"
+            if re.match(r"^\s*(END\.|THE END\.?|FADE OUT\.?|FADE TO BLACK\.?)\s*$", raw, re.I):
+                el_type = "transition"
+                raw = raw.upper()
             elements.append({
-                "type": "action",
+                "type": el_type,
                 "text": raw,
                 "display_text": raw,
                 "page": 1,
@@ -274,6 +279,8 @@ STRIP_PAT = re.compile(
     r"^\s*\(?(CONTINUED|CONT'D|MORE)\)?:?\s*$", re.IGNORECASE
 )
 PAGE_NUM_PAT = re.compile(r"^\s*\d+\.?\s*$")
+# Doubled page number artefact from some PDF renderers: "22.." "33.." "44.."
+DOUBLED_PAGE_PAT = re.compile(r"^(\d)\1\.{2}$|^(\d{2})\2\.{2}$")
 
 # Spec §2.1 — indent thresholds in points (1" = 72pt)
 # US Letter 8.5" page. pdfplumber x0 is from left edge of page.
@@ -346,11 +353,16 @@ def parse_pdf(file_path):
             if header_words:
                 hl = " ".join(w["text"] for w in
                               sorted(header_words, key=lambda w: w["x0"]))
-                # Fix double-rendered headers
+                # Fix double-rendered headers e.g. "BBlluuee RReevv.."
                 if (len(hl) >= 8 and
                         all(hl[i] == hl[i+1]
                             for i in range(0, min(8, len(hl)-1), 2))):
                     hl = hl[::2]
+                # Fix doubled page numbers e.g. "22.." → "2."
+                hl = re.sub(r"^(\d)(\.)\s*$", r"\1\2", hl.strip())
+                hl = re.sub(r"^(\d+)(\.+)\s*$",
+                            lambda m: m.group(1)[:len(m.group(1))//2 or 1] + ".",
+                            hl.strip()) if re.match(r"^\d+\.+$", hl.strip()) else hl
                 page_headers[page_num] = hl
 
             # Content words
@@ -408,6 +420,8 @@ def _classify_annotated(lines):
                 pending_char_id = None
             continue
         if PAGE_NUM_PAT.match(stripped):
+            continue
+        if DOUBLED_PAGE_PAT and DOUBLED_PAGE_PAT.match(stripped):
             continue
         if STRIP_PAT.match(stripped):
             continue
