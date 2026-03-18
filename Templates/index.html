@@ -487,6 +487,20 @@
   }
   .speed-pill.active { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 600; }
 
+  .announce-toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-top: 10px;
+    padding: 10px 12px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .announce-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+
   /* Dojo panel */
   .dojo-panel {
     background: var(--bg2);
@@ -699,15 +713,16 @@
             <button class="speed-pill" onclick="setSpeed(1.5,this)">1.5×</button>
             <button class="speed-pill" onclick="setSpeed(2,this)">2×</button>
           </div>
+          <!-- Announce character name toggle -->
+          <div class="announce-toggle-row">
+            <span class="announce-label">Read character names</span>
+            <div class="toggle-switch active" id="toggle-announce" onclick="toggleAnnounce()" title="Narrator reads the character name before each speech"></div>
+          </div>
         </div>
 
         <div class="dojo-panel">
           <div class="dojo-title">🎭 Actor's Dojo</div>
           <div class="dojo-sub">Mute characters to rehearse your lines</div>
-          <div class="dojo-char-row" style="margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:12px;">
-            <span class="dojo-char-name" style="font-size:12px;color:var(--muted);">Announce character name</span>
-            <div class="toggle-switch active" id="toggle-announce" onclick="toggleAnnounce()"></div>
-          </div>
           <div id="dojo-chars"></div>
         </div>
 
