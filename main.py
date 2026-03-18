@@ -60,6 +60,11 @@ ABBREV = {
 def expand_abbrevs(text):
     for pattern, replacement in ABBREV.items():
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    # "/" in dialogue/action → natural spoken form
+    # "mid/late" → "mid to late", "INT./EXT." already handled
+    text = re.sub(r'(\w+)/(\w+)', lambda m: f"{m.group(1)} to {m.group(2)}", text)
+    # Remove double spaces
+    text = re.sub(r'  +', ' ', text)
     return text
 
 # Scene heading tokens → spoken form
