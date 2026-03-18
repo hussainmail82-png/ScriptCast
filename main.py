@@ -260,12 +260,25 @@ def parse_fdx(file_path):
             pending_char    = None
             pending_char_id = None
 
-    # Build page_map from elements
-    page_map = {}
-    for i, el in enumerate(elements):
-        page_map.setdefault(el["page"], []).append(i)
+    # Extract title page from <TitlePage><Content> and prepend as page 1 elements
+    title_page_elements = []
+    tp_content = root.find(".//TitlePage/Content")
+    if tp_content is not None:
+        for para in tp_content.findall("Paragraph"):
+            raw_tp = "".join(t.text or "" for t in para.iter("Text")).strip()
+            raw_tp = normalise_unicode(raw_tp)
+            if raw_tp:
+                title_page_elements.append({
+                    "type": "action",
+                    "text": raw_tp,
+                    "display_text": raw_tp,
+                    "page": 1,
+                })
 
-    return elements, page_map
+    # Prepend title page so page 1 is always present in page_map
+    all_elements = title_page_elements + elements
+
+    return all_elements, {}   # {} = page_headers (FDX has no running headers)
 
 
 # ---------------------------------------------------------------------------
