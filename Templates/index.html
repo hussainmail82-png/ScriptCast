@@ -1059,7 +1059,7 @@ async function getAudio(idx, el) {
   const resp = await fetch("/tts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text: el.text, voice_id: voiceId, parenthetical })
+    body: JSON.stringify({ text: el.text, voice_id: voiceId, parenthetical, element_type: el.type })
   });
   const data = await resp.json();
   if (data.error) throw new Error(data.error);
