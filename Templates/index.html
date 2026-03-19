@@ -263,12 +263,14 @@
 
   /* Screenplay page */
   .page-container {
-    background: var(--bg2);
+    background: var(--bg3);
     border: 1px solid var(--border);
     border-radius: 12px;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: auto;
     padding: 0;
-    display: block;
+    display: flex;
+    flex-direction: column;
     min-width: 0;
   }
 
@@ -359,48 +361,65 @@
   .el:hover { background: rgba(232,184,75,.12); }
   .el.playing { background: rgba(232,184,75,.25); }
 
-  /* SCENE HEADING — L=108px R=540px */
+  /* SCENE HEADING — 60 chars wide, left=108px */
   .el-scene_heading {
     font-weight: bold;
-    margin: 1.5em 72px 0 108px;
+    margin-top: 1.5em;
+    margin-bottom: 0;
+    margin-left: 108px;
+    width: 60ch;
     display: block;
     line-height: 1.5;
     position: relative;
   }
 
-  /* ACTION — L=108px R=540px */
+  /* ACTION — 60 chars wide, left=108px */
   .el-action {
-    margin: 1em 72px 0 108px;
+    margin-top: 1em;
+    margin-bottom: 0;
+    margin-left: 108px;
+    width: 60ch;
     display: block;
     line-height: 1.5;
   }
 
-  /* CHARACTER CUE — L=252px */
+  /* CHARACTER CUE — left=252px, unconstrained width */
   .el-character {
-    margin: 1em 0 0 252px;
+    margin-top: 1em;
+    margin-bottom: 0;
+    margin-left: 252px;
     text-transform: uppercase;
     display: block;
     line-height: 1.5;
   }
 
-  /* DIALOGUE — L=180px R=432px */
+  /* DIALOGUE — 35 chars wide, left=180px */
   .el-dialogue {
-    margin: 0 180px 0 180px;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 180px;
+    width: 35ch;
     display: block;
     line-height: 1.5;
   }
 
-  /* PARENTHETICAL — L=216px R=396px */
+  /* PARENTHETICAL — 25 chars wide, left=216px */
   .el-parenthetical {
-    margin: 0 216px 0 216px;
+    margin-top: 0;
+    margin-bottom: 0;
+    margin-left: 216px;
+    width: 25ch;
     display: block;
     line-height: 1.5;
     font-style: italic;
   }
 
-  /* TRANSITION — L=396px right-aligned */
+  /* TRANSITION — right-aligned, right edge at 511px */
   .el-transition {
-    margin: 1em 101px 0 396px;
+    margin-top: 1em;
+    margin-bottom: 0;
+    margin-left: 396px;
+    width: 15ch;
     text-align: right;
     display: block;
     line-height: 1.5;
