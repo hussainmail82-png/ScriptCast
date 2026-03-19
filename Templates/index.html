@@ -272,9 +272,7 @@
     min-width: 0;
   }
 
-  #script-display {
-    margin: 0 14px;
-  }
+  /* #script-display margin removed — element indents are absolute from page left */
 
   .page-toolbar {
     display: flex;
@@ -316,8 +314,8 @@
 
   .page-wrapper {
     background: #fffef8;
-    width: 793px;
-    min-height: 1057px;
+    width: 816px;
+    min-height: 1056px;
     margin: 0 auto;
     box-shadow: 0 2px 16px rgba(0,0,0,0.35);
     box-sizing: border-box;
@@ -328,10 +326,10 @@
 
   #script-display {
     background: var(--page-bg);
-    width: 793px;
-    min-height: 1057px;
-    /* Top/bottom margins = 72px. Left/right = 0 — elements handle their own indentation */
-    padding: 72px 0;
+    width: 816px;
+    min-height: 1056px;
+    /* Top/bottom margins = 72pt × 1.333 = 96px. Left/right = 0 — elements handle their own indentation */
+    padding: 96px 0;
     box-sizing: border-box;
     font-family: var(--font-script);
     font-size: 12px;
@@ -390,7 +388,7 @@
 
   /* DIALOGUE: 180pt = 240px from page left, right ~487pt = 649px */
   .el-dialogue {
-    margin-left: 30.26%;
+    margin-left: 240px;
     margin-right: 144px;
     margin-top: 0;
     margin-bottom: 0;
@@ -398,10 +396,10 @@
     line-height: 1.5;
   }
 
-  /* PARENTHETICAL: between dialogue and character */
+  /* PARENTHETICAL: x0=209pt × 1.333 = 279px from page left */
   .el-parenthetical {
-    margin-left: 288px;
-    margin-right: 192px;
+    margin-left: 279px;
+    margin-right: 144px;
     margin-top: 0;
     margin-bottom: 0;
     display: block;
@@ -967,20 +965,16 @@ function buildScriptDisplay() {
     // Render each element type correctly
     if (el.type === 'scene_heading') {
       // Parse "1 EXT. BOAT. DAY. 1" → left number, heading text, right number
-      // Left number sits at 72px from page left (in the margin, before body text at 144px)
-      // Right number sits at 698px from page left (= 523pt × 1.333)
-      // .el-scene_heading has margin-left:144px, so:
-      //   left number offset from element = 72-144 = -72px (use absolute left:-72px)
-      //   right number: page 698px - 144px margin-left - element width... use absolute right
-      //   Right body edge ≈ 793-72=721px. Element right edge = 793-72=721px
-      //   Right number at 698px from page = 698-144=554px from element left
+      // Page: 816px. Scene num left: 54pt×1.333=72px from page left → left:-72px from element edge
+      // Scene num right: 523pt×1.333=697px from page left. Element right edge=816-144=672px
+      // So right num is 697-672=25px past element right edge → right:-25px
       const raw = el.display_text || el.text || '';
       const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
       if (m) {
         div.innerHTML =
           '<span style="position:absolute;left:-72px">' + m[1] + '</span>' +
           '<span>' + m[2] + '</span>' +
-          '<span style="position:absolute;right:0">' + m[3] + '</span>';
+          '<span style="position:absolute;right:-25px">' + m[3] + '</span>';
       } else {
         div.textContent = raw;
       }
