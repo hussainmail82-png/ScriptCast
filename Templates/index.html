@@ -215,11 +215,27 @@
   }
   .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
 
+  .cast-settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 20px;
+    margin-top: 20px;
+  }
+  .cast-settings-label {
+    font-size: 14px;
+    color: var(--text);
+    font-weight: 500;
+  }
+
   .action-row {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     gap: 12px;
-    margin-top: 32px;
+    margin-top: 16px;
   }
 
   /* ── Playback ─────────────────────────────────────────────── */
@@ -489,16 +505,15 @@
 
   .announce-toggle-row {
     display: flex; align-items: center; justify-content: space-between;
-    margin-top: 10px;
-    padding: 10px 12px;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    width: 100%;
+    padding: 10px 0 2px 0;
+    border-top: 1px solid var(--border);
   }
   .announce-label {
     font-size: 12px;
     color: var(--muted);
     font-weight: 500;
+    letter-spacing: .3px;
   }
 
   /* Dojo panel */
@@ -667,12 +682,12 @@
       <div class="section-heading">Auto-cast complete</div>
       <div class="section-sub" id="cast-summary">Characters detected and matched to voices</div>
       <div class="cast-grid" id="cast-grid"></div>
+      <div class="cast-settings-row">
+        <span class="cast-settings-label">Read character names aloud</span>
+        <div class="toggle-switch active" id="toggle-announce-cast" onclick="toggleAnnounce()" title="Narrator reads the character name before each speech"></div>
+      </div>
       <div class="action-row">
         <button class="btn btn-ghost" onclick="goUpload()">← Re-upload</button>
-        <div class="announce-toggle-row" style="flex:1; justify-content:center;">
-          <span class="announce-label">Read character names aloud</span>
-          <div class="toggle-switch active" id="toggle-announce-cast" onclick="toggleAnnounce()" title="Narrator reads the character name before each speech"></div>
-        </div>
         <button class="btn btn-primary" onclick="goPlayback()">Start playback →</button>
       </div>
     </div>
