@@ -161,10 +161,29 @@
     color: var(--accent);
     margin-bottom: 4px;
   }
+  .cast-char-row {
+    display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px;
+  }
   .cast-lines {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--muted);
-    margin-bottom: 12px;
+  }
+  .cast-voice-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+  .cast-tags-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    margin-top: 12px;
+    margin-bottom: 6px;
+    font-weight: 600;
   }
 
   .cast-voice-select {
@@ -539,12 +558,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: 10px 0;
     border-bottom: 1px solid var(--border);
     font-size: 13px;
   }
   .dojo-char-row:last-child { border-bottom: none; }
-  .dojo-char-name { font-weight: 600; color: var(--text); }
+  .dojo-char-info { display: flex; flex-direction: column; gap: 2px; }
+  .dojo-char-name { font-weight: 600; color: var(--text); font-size: 13px; }
+  .dojo-char-lines { font-size: 11px; color: var(--muted); }
+  .dojo-char-control { display: flex; align-items: center; gap: 8px; }
+  .dojo-mute-label { font-size: 11px; color: var(--accent); font-weight: 600; min-width: 22px; text-align: right; }
 
   .toggle-switch {
     width: 36px; height: 20px;
@@ -616,17 +639,58 @@
     margin-bottom: 32px;
   }
 
-  /* Error toast */
+  /* Toast */
   #toast {
     position: fixed;
     bottom: 24px; left: 50%; transform: translateX(-50%);
-    background: var(--danger);
-    color: #fff;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    color: var(--text);
     padding: 12px 24px;
     border-radius: 8px;
     font-size: 14px;
     display: none;
     z-index: 999;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+  }
+  #toast.toast-error {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
+  }
+  #toast.toast-success {
+    background: var(--success);
+    border-color: var(--success);
+    color: #fff;
+  }
+
+  /* Transport labels */
+  .transport-section-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    align-self: flex-start;
+    width: 100%;
+  }
+  .transport-row-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    align-self: flex-start;
+    width: 100%;
+    margin-bottom: -8px;
+  }
+  .transport-btn-labels {
+    display: flex;
+    width: 100%;
+    justify-content: space-around;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: -10px;
+    padding: 0 4px;
+    letter-spacing: .3px;
   }
 </style>
 </head>
@@ -656,7 +720,7 @@
     <!-- STEP 1: Upload -->
     <div class="screen active" id="screen-upload">
       <div class="section-heading">Upload your screenplay</div>
-      <div class="section-sub">Supports Final Draft (.fdx) and PDF formats</div>
+      <div class="section-sub">Drop a Final Draft (.fdx) or PDF file — we'll detect the characters and assign voices automatically</div>
 
       <div class="upload-zone" id="drop-zone">
         <input type="file" id="file-input" accept=".pdf,.fdx">
@@ -679,16 +743,16 @@
 
     <!-- STEP 2: Voice Assignment -->
     <div class="screen" id="screen-cast">
-      <div class="section-heading">Auto-cast complete</div>
+      <div class="section-heading">Meet your cast</div>
       <div class="section-sub" id="cast-summary">Characters detected and matched to voices</div>
       <div class="cast-grid" id="cast-grid"></div>
       <div class="cast-settings-row">
-        <span class="cast-settings-label">Read character names aloud</span>
+        <span class="cast-settings-label">Read character names before dialogue</span>
         <div class="toggle-switch active" id="toggle-announce-cast" onclick="toggleAnnounce()" title="Narrator reads the character name before each speech"></div>
       </div>
       <div class="action-row">
         <button class="btn btn-ghost" onclick="goUpload()">← Re-upload</button>
-        <button class="btn btn-primary" onclick="goPlayback()">Start playback →</button>
+        <button class="btn btn-primary" onclick="goPlayback()">Start listening →</button>
       </div>
     </div>
 
@@ -717,31 +781,35 @@
         <div class="now-playing">
           <div class="now-playing-label">Now playing</div>
           <div class="now-playing-char" id="np-char">—</div>
-          <div class="now-playing-text" id="np-text">Press play to begin</div>
+          <div class="now-playing-text" id="np-text">Hit ▶ or press Space to begin</div>
         </div>
 
         <div class="transport">
+          <div class="transport-section-label">Playback</div>
           <div class="transport-btns">
             <button class="t-btn" onclick="skipBack()" title="Previous line">⏮</button>
-            <button class="t-btn play-btn" id="play-btn" onclick="togglePlay()">▶</button>
+            <button class="t-btn play-btn" id="play-btn" onclick="togglePlay()" title="Play / Pause (Space)">▶</button>
             <button class="t-btn" onclick="skipForward()" title="Next line">⏭</button>
           </div>
+          <div class="transport-btn-labels">
+            <span>Prev</span><span>Play / Pause</span><span>Next</span>
+          </div>
+          <div class="transport-row-label">Speed</div>
           <div class="speed-row" id="speed-row">
             <button class="speed-pill active" onclick="setSpeed(1,this)">1×</button>
             <button class="speed-pill" onclick="setSpeed(1.25,this)">1.25×</button>
             <button class="speed-pill" onclick="setSpeed(1.5,this)">1.5×</button>
             <button class="speed-pill" onclick="setSpeed(2,this)">2×</button>
           </div>
-          <!-- Announce character name toggle -->
           <div class="announce-toggle-row">
-            <span class="announce-label">Read character names</span>
+            <span class="announce-label">Read character names before dialogue</span>
             <div class="toggle-switch active" id="toggle-announce" onclick="toggleAnnounce()" title="Narrator reads the character name before each speech"></div>
           </div>
         </div>
 
         <div class="dojo-panel">
           <div class="dojo-title">🎭 Actor's Dojo</div>
-          <div class="dojo-sub">Mute characters to rehearse your lines</div>
+          <div class="dojo-sub">Toggle a character off to practise their lines yourself</div>
           <div id="dojo-chars"></div>
         </div>
 
@@ -787,7 +855,7 @@ fileInput.addEventListener("change", e => handleFile(e.target.files[0]));
 function handleFile(file) {
   if (!file) return;
   const ext = file.name.split(".").pop().toLowerCase();
-  if (!["pdf","fdx"].includes(ext)) { showToast("Please upload a .pdf or .fdx file"); return; }
+  if (!["pdf","fdx"].includes(ext)) { showToast("Please upload a .pdf or .fdx file", "error"); return; }
 
   showLoading("Parsing screenplay…");
   const fd = new FormData();
@@ -796,7 +864,7 @@ function handleFile(file) {
   fetch("/upload", { method: "POST", body: fd })
     .then(r => r.json())
     .then(data => {
-      if (data.error) { hideLoading(); showToast(data.error); return; }
+      if (data.error) { hideLoading(); showToast(data.error, "error"); return; }
       elements    = data.elements;
       casting     = data.casting;
       pageMap     = data.page_map;
@@ -807,7 +875,7 @@ function handleFile(file) {
       goScreen("screen-cast");
       stepDone(1);
     })
-    .catch(() => { hideLoading(); showToast("Upload failed — check server logs"); });
+    .catch(() => { hideLoading(); showToast("Upload failed — check server logs", "error"); });
 }
 
 // ── Voice assignment screen ───────────────────────────────────────────────
@@ -856,13 +924,17 @@ function buildCastScreen() {
     const tags = [info.accent, info.age, ...(info.profile?.traits||[])].filter(Boolean);
     const tagsHtml = tags.map(t => `<span class="cast-tag">${t}</span>`).join("");
 
+    const tagsLabel = tags.length ? `<div class="cast-tags-label">Voice profile</div><div class="cast-tags">${tagsHtml}</div>` : "";
     card.innerHTML = `
-      <div class="cast-char">${char}</div>
-      <div class="cast-lines">${lineCounts[char]||0} lines</div>
+      <div class="cast-char-row">
+        <div class="cast-char">${char}</div>
+        <div class="cast-lines">${lineCounts[char]||0} line${(lineCounts[char]||0)!==1?'s':''}</div>
+      </div>
+      <div class="cast-voice-label">Assigned voice</div>
       <select class="cast-voice-select" data-char="${char}" onchange="updateCast('${char}', this.value)">
         ${selectOpts}
       </select>
-      <div class="cast-tags">${tagsHtml}</div>`;
+      ${tagsLabel}`;
 
     grid.appendChild(card);
   });
@@ -932,11 +1004,18 @@ function buildDojoPanel() {
   elements.forEach(e => { if (e.character) lineCounts[e.character] = (lineCounts[e.character]||0)+1; });
 
   characters.slice().sort((a,b) => (lineCounts[b]||0)-(lineCounts[a]||0)).forEach(char => {
+    const lines = lineCounts[char] || 0;
     const row = document.createElement("div");
     row.className = "dojo-char-row";
     row.innerHTML = `
-      <span class="dojo-char-name">${char}</span>
-      <div class="toggle-switch active" id="toggle-${char.replace(/\s/g,'_')}" onclick="toggleMute('${char}')"></div>`;
+      <div class="dojo-char-info">
+        <span class="dojo-char-name">${char}</span>
+        <span class="dojo-char-lines">${lines} line${lines !== 1 ? 's' : ''}</span>
+      </div>
+      <div class="dojo-char-control">
+        <span class="dojo-mute-label" id="label-${char.replace(/\s/g,'_')}">On</span>
+        <div class="toggle-switch active" id="toggle-${char.replace(/\s/g,'_')}" onclick="toggleMute('${char}')"></div>
+      </div>`;
     panel.appendChild(row);
   });
 }
@@ -944,13 +1023,17 @@ function buildDojoPanel() {
 function toggleMute(char) {
   const id = `toggle-${char.replace(/\s/g,'_')}`;
   const el = document.getElementById(id);
+  const label = document.getElementById(`label-${char.replace(/\s/g,'_')}`);
   if (mutedChars.has(char)) {
     mutedChars.delete(char);
     el.classList.add("active");
+    if (label) label.textContent = "On";
   } else {
     mutedChars.add(char);
     el.classList.remove("active");
+    if (label) { label.textContent = "Off"; label.style.color = "var(--muted)"; }
   }
+  if (label) label.style.color = mutedChars.has(char) ? "var(--muted)" : "var(--accent)";
 }
 
 function buildSceneDropdown() {
@@ -1068,7 +1151,7 @@ async function playNext() {
 
   if (currentIdx >= elements.length) {
     pause();
-    showToast("End of screenplay");
+    showToast("End of screenplay ✓");
     return;
   }
 
@@ -1362,11 +1445,13 @@ function stepDone(n) {
   if (n < 3) document.getElementById(`dot-${n+1}`).className = "step-dot active";
 }
 
-function showToast(msg) {
+function showToast(msg, type="info") {
   const t = document.getElementById("toast");
   t.textContent = msg;
+  t.className = type === "error" ? "toast-error" : type === "success" ? "toast-success" : "";
   t.style.display = "block";
-  setTimeout(() => t.style.display = "none", 3500);
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = "none"; }, type === "error" ? 5000 : 3000);
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
