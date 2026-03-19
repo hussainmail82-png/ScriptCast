@@ -357,60 +357,46 @@
   */
   .el-scene_heading {
     font-weight: bold;
-    margin: 1.4em 0 0;
+    margin: 1.4em 96px 0 144px;
     display: block;
     line-height: 1.5;
     position: relative;
-    margin-left: 144px;
-    margin-right: 144px;
   }
   /* scene numbers use inline style — see JS render */
 
   /* ACTION: starts at 108pt = 144px from page left */
   .el-action {
-    margin-left: 144px;
-    margin-right: 144px;
-    margin-top: 1em;
-    margin-bottom: 0;
+    margin: 1em 96px 0 144px;
     display: block;
     line-height: 1.5;
   }
 
   /* CHARACTER CUE: 252pt = 336px from page left */
   .el-character {
-    margin-left: 336px;
+    margin: 1em 0 0 336px;
     text-transform: uppercase;
-    margin-top: 1em;
-    margin-bottom: 0;
     display: block;
     line-height: 1.5;
   }
 
   /* DIALOGUE: 180pt = 240px from page left, right ~487pt = 649px */
   .el-dialogue {
-    margin-left: 240px;
-    margin-right: 144px;
-    margin-top: 0;
-    margin-bottom: 0;
+    margin: 0 240px 0 240px;
     display: block;
     line-height: 1.5;
   }
 
-  /* PARENTHETICAL: x0=209pt × 1.333 = 279px from page left */
+  /* PARENTHETICAL — L=216pt=288px, R=396pt=528px → right margin=288px */
   .el-parenthetical {
-    margin-left: 279px;
-    margin-right: 144px;
-    margin-top: 0;
-    margin-bottom: 0;
+    margin: 0 288px 0 288px;
     display: block;
     line-height: 1.5;
     font-style: italic;
   }
 
   .el-transition {
-    margin-right: 72px;
+    margin: 1em 96px 0 528px;
     text-align: right;
-    margin-top: 1em;
     display: block;
     line-height: 1.5;
   }
@@ -974,7 +960,7 @@ function buildScriptDisplay() {
         div.innerHTML =
           '<span style="position:absolute;left:-72px">' + m[1] + '</span>' +
           '<span>' + m[2] + '</span>' +
-          '<span style="position:absolute;right:-25px">' + m[3] + '</span>';
+          '<span style="position:absolute;right:23px">' + m[3] + '</span>';
       } else {
         div.textContent = raw;
       }
