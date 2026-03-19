@@ -312,12 +312,23 @@
        Scene numbers use absolute position within .el-scene_heading
   ─────────────────────────────────────────────────────────────────── */
 
+  /* ── Screenplay page — 72dpi, 1pt = 1px, matches Final Draft natively
+     Page: 8.5"×11" = 612px×792px. Courier 12pt = 12px.
+     All indents from FDX ElementSettings (LeftIndent/RightIndent = from page left):
+       Scene/Action:   L=108px  R=540px  → margin: L=108  R=72
+       Character:      L=252px
+       Parenthetical:  L=216px  R=396px  → margin: L=216  R=216
+       Dialogue:       L=180px  R=432px  → margin: L=180  R=180
+       Transition:     L=396px  R=511px  → right-aligned, R margin=101
+       Scene num L:    54px from page → left:-54px inside element
+       Scene num R:    ~524px from page → right:16px inside element
+  ─────────────────────────────────────────────────────────────── */
   .page-wrapper {
     background: #fffef8;
-    width: 816px;
-    min-height: 1056px;
+    width: 612px;
+    min-height: 792px;
     margin: 0 auto;
-    box-shadow: 0 2px 16px rgba(0,0,0,0.35);
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
     box-sizing: border-box;
     flex-shrink: 0;
     border: 1px solid #e0ddd4;
@@ -326,10 +337,9 @@
 
   #script-display {
     background: var(--page-bg);
-    width: 816px;
-    min-height: 1056px;
-    /* Top/bottom margins = 72pt × 1.333 = 96px. Left/right = 0 — elements handle their own indentation */
-    padding: 96px 0;
+    width: 612px;
+    min-height: 792px;
+    padding: 72px 0;
     box-sizing: border-box;
     font-family: var(--font-script);
     font-size: 12px;
@@ -349,53 +359,48 @@
   .el:hover { background: rgba(232,184,75,.12); }
   .el.playing { background: rgba(232,184,75,.25); }
 
-  /* SCENE HEADING
-     Number left:  54pt = 72px from page left (sits in margin)
-     Text:        108pt = 144px from page left
-     Number right: 523pt = 698px from page left (right-aligned at body right)
-     Element is position:relative so child spans can be absolute
-  */
+  /* SCENE HEADING — L=108px R=540px */
   .el-scene_heading {
     font-weight: bold;
-    margin: 1.4em 96px 0 144px;
+    margin: 1.5em 72px 0 108px;
     display: block;
     line-height: 1.5;
     position: relative;
   }
-  /* scene numbers use inline style — see JS render */
 
-  /* ACTION: starts at 108pt = 144px from page left */
+  /* ACTION — L=108px R=540px */
   .el-action {
-    margin: 1em 96px 0 144px;
+    margin: 1em 72px 0 108px;
     display: block;
     line-height: 1.5;
   }
 
-  /* CHARACTER CUE: 252pt = 336px from page left */
+  /* CHARACTER CUE — L=252px */
   .el-character {
-    margin: 1em 0 0 336px;
+    margin: 1em 0 0 252px;
     text-transform: uppercase;
     display: block;
     line-height: 1.5;
   }
 
-  /* DIALOGUE: 180pt = 240px from page left, right ~487pt = 649px */
+  /* DIALOGUE — L=180px R=432px */
   .el-dialogue {
-    margin: 0 240px 0 240px;
+    margin: 0 180px 0 180px;
     display: block;
     line-height: 1.5;
   }
 
-  /* PARENTHETICAL — L=216pt=288px, R=396pt=528px → right margin=288px */
+  /* PARENTHETICAL — L=216px R=396px */
   .el-parenthetical {
-    margin: 0 288px 0 288px;
+    margin: 0 216px 0 216px;
     display: block;
     line-height: 1.5;
     font-style: italic;
   }
 
+  /* TRANSITION — L=396px right-aligned */
   .el-transition {
-    margin: 1em 96px 0 528px;
+    margin: 1em 101px 0 396px;
     text-align: right;
     display: block;
     line-height: 1.5;
@@ -958,9 +963,9 @@ function buildScriptDisplay() {
       const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
       if (m) {
         div.innerHTML =
-          '<span style="position:absolute;left:-72px">' + m[1] + '</span>' +
+          '<span style="position:absolute;left:-54px">' + m[1] + '</span>' +
           '<span>' + m[2] + '</span>' +
-          '<span style="position:absolute;right:23px">' + m[3] + '</span>';
+          '<span style="position:absolute;right:16px">' + m[3] + '</span>';
       } else {
         div.textContent = raw;
       }
