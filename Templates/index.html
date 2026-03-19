@@ -314,21 +314,32 @@
        Scene numbers use absolute position within .el-scene_heading
   ─────────────────────────────────────────────────────────────────── */
 
-  /* ── Screenplay page — 72dpi, 1pt = 1px, matches Final Draft natively
-     Page: 8.5"×11" = 612px×792px. Courier 12pt = 12px.
-     All indents from FDX ElementSettings (LeftIndent/RightIndent = from page left):
-       Scene/Action:   L=108px  R=540px  → margin: L=108  R=72
-       Character:      L=252px
-       Parenthetical:  L=216px  R=396px  → margin: L=216  R=216
-       Dialogue:       L=180px  R=432px  → margin: L=180  R=180
-       Transition:     L=396px  R=511px  → right-aligned, R margin=101
-       Scene num L:    54px from page → left:-54px inside element
-       Scene num R:    ~524px from page → right:16px inside element
-  ─────────────────────────────────────────────────────────────── */
+  /* ── Screenplay page layout ─────────────────────────────────────────
+     Spec: US Letter 8.5"×11" at 96dpi (browser native). 1" = 96px.
+     Font: Courier 12pt = 16px. Line height: exactly 12pt = 16px (6 lines/inch).
+     54 lines per page (9" text area ÷ 6 lines/inch).
+
+     Margins (from page edge):
+       Left:   1.5" = 144px  (brad holes)
+       Right:  1.0" = 96px
+       Top:    1.0" = 96px
+       Bottom: 1.0" = 96px
+
+     Elements (from LEFT EDGE of page):
+       Scene/Action:   1.5" = 144px  → margin-left:144px, margin-right:96px  (col=576px=60ch)
+       Dialogue:       2.5" = 240px  → margin-left:240px, margin-right:240px (col=336px=35ch)
+       Parenthetical:  3.1" = 298px  → margin-left:298px, margin-right:250px (col=269px)
+       Character Cue:  3.7" = 355px  → margin-left:355px
+       Transition:     6.0" = 576px  → right-aligned to right margin
+
+     Char width: 16px × 0.6 = 9.6px → 576/9.6 = 60 chars/line ✓
+                                        336/9.6 = 35 chars/line ✓
+  ──────────────────────────────────────────────────────────────────── */
+
   .page-wrapper {
     background: #fffef8;
-    width: 612px;
-    min-height: 792px;
+    width: 816px;
+    min-height: 1056px;
     margin: 0 auto;
     box-shadow: 0 4px 24px rgba(0,0,0,0.4);
     box-sizing: border-box;
@@ -339,13 +350,13 @@
 
   #script-display {
     background: var(--page-bg);
-    width: 612px;
-    min-height: 792px;
-    padding: 72px 0;
+    width: 816px;
+    min-height: 1056px;
+    padding: 96px 0;
     box-sizing: border-box;
-    font-family: var(--font-script);
-    font-size: 12px;
-    line-height: 1.5;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 16px;
+    line-height: 16px;
     color: var(--page-text);
     position: relative;
   }
@@ -356,56 +367,56 @@
     border-radius: 2px;
     transition: background .15s;
     display: block;
-    line-height: 1.5;
+    line-height: 16px;
   }
-  .el:hover { background: rgba(232,184,75,.12); }
+  .el:hover  { background: rgba(232,184,75,.12); }
   .el.playing { background: rgba(232,184,75,.25); }
 
-  /* SCENE HEADING — left=108px, right=24px (col=480px ≈ 61 chars Courier New 12px) */
+  /* SCENE HEADING — 1.5" left, 1.0" right, ALL CAPS, bold */
   .el-scene_heading {
     font-weight: bold;
-    margin: 1.5em 24px 0 108px;
+    margin: 32px 96px 0 144px;
     display: block;
-    line-height: 1.5;
+    line-height: 16px;
     position: relative;
   }
 
-  /* ACTION — left=108px, right=24px (col=480px ≈ 61 chars) */
+  /* ACTION — 1.5" left, 1.0" right */
   .el-action {
-    margin: 1em 24px 0 108px;
+    margin: 16px 96px 0 144px;
     display: block;
-    line-height: 1.5;
+    line-height: 16px;
   }
 
-  /* CHARACTER CUE — left=252px */
+  /* CHARACTER CUE — 3.7" from left */
   .el-character {
-    margin: 1em 0 0 252px;
+    margin: 16px 0 0 355px;
     text-transform: uppercase;
     display: block;
-    line-height: 1.5;
+    line-height: 16px;
   }
 
-  /* DIALOGUE — left=180px, right=157px (col=275px ≈ 35 chars) */
+  /* DIALOGUE — 2.5" left, right edge at 6.0" */
   .el-dialogue {
-    margin: 0 157px 0 180px;
+    margin: 0 240px 0 240px;
     display: block;
-    line-height: 1.5;
+    line-height: 16px;
   }
 
-  /* PARENTHETICAL — left=216px, right=199px (col=197px ≈ 25 chars) */
+  /* PARENTHETICAL — 3.1" left, right edge ~5.9" */
   .el-parenthetical {
-    margin: 0 199px 0 216px;
+    margin: 0 250px 0 298px;
     display: block;
-    line-height: 1.5;
+    line-height: 16px;
     font-style: italic;
   }
 
-  /* TRANSITION — right-aligned, left=396px */
+  /* TRANSITION — 6.0" left, right-aligned to right margin */
   .el-transition {
-    margin: 1em 24px 0 396px;
+    margin: 16px 96px 0 576px;
     text-align: right;
     display: block;
-    line-height: 1.5;
+    line-height: 16px;
   }
 
   .page-header-bar {
@@ -958,16 +969,16 @@ function buildScriptDisplay() {
     // Render each element type correctly
     if (el.type === 'scene_heading') {
       // Parse "1 EXT. BOAT. DAY. 1" → left number, heading text, right number
-      // Page: 816px. Scene num left: 54pt×1.333=72px from page left → left:-72px from element edge
+      // Page: 816px @96dpi. Scene num L: 0.75"=72px → left:-72px. Scene num R: flush right → right:0
       // Scene num right: 523pt×1.333=697px from page left. Element right edge=816-144=672px
       // So right num is 697-672=25px past element right edge → right:-25px
       const raw = el.display_text || el.text || '';
       const m = raw.match(/^(\d+[A-Z]?)\s+(.+?)\s+(\d+[A-Z]?)$/);
       if (m) {
         div.innerHTML =
-          '<span style="position:absolute;left:-54px">' + m[1] + '</span>' +
+          '<span style="position:absolute;left:-72px">' + m[1] + '</span>' +
           '<span>' + m[2] + '</span>' +
-          '<span style="position:absolute;right:16px">' + m[3] + '</span>';
+          '<span style="position:absolute;right:0">' + m[3] + '</span>';
       } else {
         div.textContent = raw;
       }
